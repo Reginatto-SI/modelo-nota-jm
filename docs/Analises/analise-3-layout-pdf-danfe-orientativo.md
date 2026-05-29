@@ -100,3 +100,42 @@ Principais mudanças:
 4. **Campo de CST usado**: o cadastro de produto usa `cst_icms`, e `buildNota` normaliza esse valor para `nota.produto.cst`. O PDF usa `cst_icms` como fallback quando existir no objeto recebido e, no fluxo atual tipado, usa `nota.produto.cst`.
 5. **PDFs de referência consultados**: foram verificados os arquivos `/public/modeo_5118.pdf`, `/public/modeo_5923.pdf` e `/public/Modelo_5132.pdf` como referências disponíveis no repositório. No ambiente atual não há ferramenta de renderização/extração visual de PDF instalada, então a consulta técnica possível foi confirmar presença, tamanho e cabeçalho PDF dos arquivos, mantendo os ajustes aderentes à estrutura visual DANFE já implementada.
 6. **Limitação técnica**: o ambiente permanece sem `node_modules`; `npm install` falha com `403 Forbidden` no registry, então `npm run build` não consegue encontrar `vite`. A validação automatizada local ficou limitada a checks que não dependem de instalação de pacotes.
+
+## 8. Refinamento visual para aproximação ao modelo legado
+
+1. **O que foi alterado no visual**
+   - O cabeçalho deixou de ter protagonismo institucional da JM e passou a simular a abertura de uma DANFE real, com faixa de recebimento, bloco central `DANFE`, área de chave/código de barras e quadros técnicos em preto/cinza.
+   - As seções passaram a usar títulos mais compactos, preenchimento azul muito claro e bordas mais escuras, reduzindo a aparência de flyer corporativo e reforçando a leitura de formulário fiscal.
+   - O rodapé orientativo foi mantido, porém com caixa menor e mais discreta, para preservar a proteção jurídica sem competir visualmente com o espelho da nota.
+   - A tabela de produto/serviço foi mantida com a mesma estrutura técnica, mas com cabeçalho neutro, linhas secas e dados do produto destacados.
+   - O bloco de dados adicionais manteve a divisão com `RESERVADO AO FISCO` e passou a destacar o conteúdo orientativo em vermelho, por ser a área de maior uso prático para o agricultor.
+
+2. **O que passou a ficar em vermelho**
+   - No cabeçalho, nome, endereço, município e UF do emitente/produtor rural.
+   - Nos blocos de emitente e destinatário/remetente: nome/razão social, CPF/CNPJ, inscrição estadual, endereço, bairro, município e UF.
+   - Na natureza da operação: modelo/natureza cadastrada e CFOP.
+   - Na tabela de produto: código quando existir, produto, NCM, CST, CFOP, unidade, quantidade, valor unitário e valor total.
+   - No cálculo do imposto: apenas os totais variáveis (`Valor total produtos` e `Valor total da nota`), mantendo os campos estruturais zerados em cor neutra.
+   - No transporte: razão social, tipo de frete e placa quando esses dados estiverem preenchidos.
+   - Em dados adicionais/informações complementares: o texto orientativo gerado a partir do modelo, incluindo contrato, confirmação de negócio, produtor, armazém/destinatário, placa, CND, vencimento e observação quando aparecerem no conteúdo.
+
+3. **Como a chave de acesso foi tratada**
+   - A linha genérica anterior foi substituída por um placeholder visual seguro (`____ ____ ____ ____ ____ ____ ____ ____ ____ ____ ____`), evitando qualquer aparência de chave consultável ou válida.
+   - A chave fica identificada como `CHAVE DE ACESSO (PREENCHER APÓS EMISSÃO DA NF-e)`, reforçando que o agricultor deve preencher/copiar a chave somente depois de emitir a NF-e no emissor oficial.
+   - A série passou a ser exibida como campo em branco (`SÉRIE: ____`), em vez de texto `xxx`, para não sugerir dado fiscal real.
+
+4. **Código de barras visual de exemplo**
+   - Foi incluído um desenho simples de barras no topo, inspirado no espaço de código de barras da DANFE real.
+   - Esse desenho continua sendo meramente visual e não representa uma chave fiscal válida nem deve ser usado para consulta oficial.
+
+5. **Posicionamento do aviso de documento orientativo**
+   - O aviso `MODELO ORIENTATIVO - SEM VALIDADE FISCAL` permanece no cabeçalho direito e no rodapé.
+   - O texto obrigatório `Este documento é um modelo orientativo para emissão da Nota Fiscal pelo produtor rural. Não possui validade fiscal como NF-e.` permanece no rodapé, em caixa menor e discreta.
+   - O rodapé continua exibindo `Gerado por JM Assessoria e Contabilidade MT - www.jmassessoriamt.com.br` junto ao aviso de documento orientativo.
+
+6. **Limitações técnicas que permaneceram**
+   - A chave de acesso é um placeholder visual seguro e o código de barras é apenas exemplo visual; nenhum dos dois é derivado de dados fiscais reais.
+   - O campo `FOLHA: 1 de 1` continua estático mesmo quando dados adicionais muito extensos exigirem nova página.
+   - O destaque em vermelho dos dados adicionais é aplicado ao conteúdo do bloco como um todo, pois o texto chega ao PDF já renderizado a partir do template; uma separação por trechos exigiria estruturação adicional do template e foi evitada para não alterar regra de negócio.
+   - Os campos de transportador/volumes continuam dependendo dos dados já existentes em `Nota`; quando não há origem real, permanecem placeholders.
+   - No ambiente de validação atual, as referências `/public/modeo_5118.pdf`, `/public/modeo_5923.pdf` e `/public/Modelo_5132.pdf` foram consultadas como arquivos do repositório, mas não houve renderização automática local por falta de ferramenta instalada para converter PDF em imagem. A comparação visual também considerou as imagens anexadas à tarefa.

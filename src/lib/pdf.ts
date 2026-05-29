@@ -6,17 +6,11 @@ const BRL = (v: number) =>
   "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const NUM = (v: number) =>
   v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const dateBR = (iso: string) => {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  return d && m && y ? `${d}/${m}/${y}` : iso;
-};
-
-const NAVY: [number, number, number] = [18, 52, 96];
-const BLUE: [number, number, number] = [220, 231, 246];
-const LIGHT: [number, number, number] = [242, 245, 249];
-const BORDER: [number, number, number] = [92, 106, 128];
-const WARN: [number, number, number] = [255, 245, 225];
+const BLUE: [number, number, number] = [235, 240, 247];
+const BORDER: [number, number, number] = [28, 31, 36];
+const RED: [number, number, number] = [205, 30, 38];
+const WARN: [number, number, number] = [255, 250, 238];
+const ACCESS_KEY_PLACEHOLDER = "____ ____ ____ ____ ____ ____ ____ ____ ____ ____ ____";
 
 const ORIENTATIVE_TITLE = "MODELO ORIENTATIVO - SEM VALIDADE FISCAL";
 const ORIENTATIVE_TEXT =
@@ -57,23 +51,23 @@ function getProdutoCst(produto: ProdutoPdf) {
 
 function setBaseStyle(doc: jsPDF) {
   doc.setFont("helvetica", "normal");
-  doc.setLineWidth(0.25);
+  doc.setLineWidth(0.18);
   doc.setDrawColor(...BORDER);
   doc.setTextColor(20, 24, 32);
 }
 
 function drawFooter(doc: jsPDF, ctx: DrawContext) {
   const y = ctx.pageHeight - 24;
-  doc.setDrawColor(210, 185, 135);
+  doc.setDrawColor(205, 190, 150);
   doc.setFillColor(...WARN);
-  doc.rect(ctx.margin, y, ctx.contentWidth, 11, "FD");
-  doc.setTextColor(126, 82, 12);
+  doc.rect(ctx.margin, y + 2, ctx.contentWidth, 9, "FD");
+  doc.setTextColor(100, 75, 35);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.3);
-  doc.text(ORIENTATIVE_TITLE, ctx.margin + 2, y + 4);
+  doc.text(ORIENTATIVE_TITLE, ctx.margin + 2, y + 5.4);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.8);
-  doc.text(doc.splitTextToSize(ORIENTATIVE_TEXT, ctx.contentWidth - 64), ctx.margin + 2, y + 7.7);
+  doc.text(doc.splitTextToSize(ORIENTATIVE_TEXT, ctx.contentWidth - 58), ctx.margin + 2, y + 8.8);
 
   doc.setTextColor(95, 105, 120);
   doc.setFontSize(7);
@@ -97,13 +91,13 @@ function ensureSpace(doc: jsPDF, ctx: DrawContext, y: number, needed: number) {
 
 function drawSectionTitle(doc: jsPDF, ctx: DrawContext, title: string, x: number, y: number, w: number) {
   doc.setFillColor(...BLUE);
-  doc.rect(x, y, w, 5.2, "F");
+  doc.rect(x, y, w, 4.4, "F");
   doc.setDrawColor(...BORDER);
-  doc.rect(x, y, w, 5.2);
-  doc.setTextColor(...NAVY);
+  doc.rect(x, y, w, 4.4);
+  doc.setTextColor(18, 24, 35);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.2);
-  doc.text(title, x + 1.6, y + 3.6);
+  doc.setFontSize(6.4);
+  doc.text(title, x + 1.1, y + 3.1);
   setBaseStyle(doc);
 }
 
@@ -124,21 +118,21 @@ function drawField(
   y: number,
   w: number,
   h = 10,
-  options: { bold?: boolean; align?: "left" | "center" | "right"; maxLines?: number } = {},
+  options: { bold?: boolean; align?: "left" | "center" | "right"; maxLines?: number; valueColor?: [number, number, number] } = {},
 ) {
   doc.setDrawColor(...BORDER);
   doc.rect(x, y, w, h);
-  doc.setTextColor(82, 91, 108);
+  doc.setTextColor(55, 58, 64);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.8);
+  doc.setFontSize(5.4);
   doc.text(label.toUpperCase(), x + 1.1, y + 2.6);
 
-  doc.setTextColor(18, 24, 35);
+  doc.setTextColor(...(options.valueColor ?? [18, 24, 35]));
   doc.setFont("helvetica", options.bold ? "bold" : "normal");
-  doc.setFontSize(options.bold ? 7.6 : 7.1);
+  doc.setFontSize(options.bold ? 7.2 : 6.8);
   const lines = fitText(doc, value, w - 2.2, options.maxLines ?? 2);
   const textX = options.align === "right" ? x + w - 1.2 : options.align === "center" ? x + w / 2 : x + 1.1;
-  doc.text(lines, textX, y + 6.3, { align: options.align ?? "left" });
+  doc.text(lines, textX, y + 6.1, { align: options.align ?? "left" });
   setBaseStyle(doc);
 }
 
@@ -153,82 +147,110 @@ function drawPartyBlock(
 ) {
   // Bloco DANFE orientativo: campos em grade compacta para se aproximar dos modelos de nota usados como referência.
   drawSectionTitle(doc, ctx, title, x, y, w);
-  const bodyY = y + 5.2;
-  const rowH = 9.8;
-  drawField(doc, "Nome / Razão Social", party.nome, x, bodyY, w * 0.55, rowH, { bold: true });
-  drawField(doc, "CPF / CNPJ", party.cpfCnpj, x + w * 0.55, bodyY, w * 0.22, rowH);
-  drawField(doc, "Inscrição Estadual", party.ie, x + w * 0.77, bodyY, w * 0.23, rowH);
+  const bodyY = y + 4.4;
+  const rowH = 9.2;
+  drawField(doc, "Nome / Razão Social", party.nome, x, bodyY, w * 0.55, rowH, { bold: true, valueColor: RED });
+  drawField(doc, "CPF / CNPJ", party.cpfCnpj, x + w * 0.55, bodyY, w * 0.22, rowH, { bold: true, valueColor: RED });
+  drawField(doc, "Inscrição Estadual", party.ie, x + w * 0.77, bodyY, w * 0.23, rowH, { bold: true, valueColor: RED });
 
-  drawField(doc, "Endereço", party.endereco, x, bodyY + rowH, w * 0.45, rowH);
-  drawField(doc, "Bairro", party.bairro, x + w * 0.45, bodyY + rowH, w * 0.2, rowH);
-  drawField(doc, "Município", party.municipio, x + w * 0.65, bodyY + rowH, w * 0.25, rowH);
-  drawField(doc, "UF", party.uf, x + w * 0.9, bodyY + rowH, w * 0.1, rowH, { align: "center" });
-  return y + 5.2 + rowH * 2;
+  drawField(doc, "Endereço", party.endereco, x, bodyY + rowH, w * 0.45, rowH, { bold: true, valueColor: RED });
+  drawField(doc, "Bairro", party.bairro, x + w * 0.45, bodyY + rowH, w * 0.2, rowH, { bold: true, valueColor: RED });
+  drawField(doc, "Município", party.municipio, x + w * 0.65, bodyY + rowH, w * 0.25, rowH, { bold: true, valueColor: RED });
+  drawField(doc, "UF", party.uf, x + w * 0.9, bodyY + rowH, w * 0.1, rowH, { bold: true, align: "center", valueColor: RED });
+  return y + 4.4 + rowH * 2;
+}
+
+function drawExampleBarcode(doc: jsPDF, x: number, y: number, w: number, h: number) {
+  // Código de barras meramente visual para aproximar do DANFE legado, sem representar uma chave fiscal válida.
+  const pattern = [1, 1, 2, 1, 3, 1, 1, 2, 2, 1, 4, 1, 1, 1, 3, 2, 1, 2, 4, 1, 2, 1, 1, 3, 3, 1, 1, 2, 2, 2, 4, 1, 1, 1, 2, 3, 1, 2];
+  const unit = w / pattern.reduce((sum, n) => sum + n, 0);
+  let cursor = x;
+  doc.setFillColor(0, 0, 0);
+  pattern.forEach((bar, index) => {
+    const barW = bar * unit;
+    if (index % 2 === 0) doc.rect(cursor, y, barW, h, "F");
+    cursor += barW;
+  });
 }
 
 function drawHeaderAndDanfe(doc: jsPDF, ctx: DrawContext, nota: Nota) {
   let y = ctx.margin;
-  const leftW = 82;
-  const danfeW = 58;
-  const cfopW = ctx.contentWidth - leftW - danfeW;
+  const receiptH = 10;
+  const mainH = 30;
+  const leftW = ctx.contentWidth * 0.51;
+  const danfeW = ctx.contentWidth * 0.12;
+  const rightW = ctx.contentWidth - leftW - danfeW;
 
   doc.setDrawColor(...BORDER);
-  doc.setFillColor(...LIGHT);
-  doc.rect(ctx.margin, y, ctx.contentWidth, 26, "FD");
-  doc.setFillColor(...NAVY);
-  doc.rect(ctx.margin, y, leftW, 26, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13.5);
-  doc.text("MODELO DE NOTA JM", ctx.margin + 4, y + 8);
-  doc.setFontSize(7.4);
-  doc.setFont("helvetica", "normal");
-  doc.text("Documento orientativo - SEM validade fiscal", ctx.margin + 4, y + 13.2);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.2);
-  doc.text(ORIENTATIVE_TITLE, ctx.margin + 4, y + 20.8);
-
-  const danfeX = ctx.margin + leftW;
+  doc.rect(ctx.margin, y, ctx.contentWidth, receiptH);
+  doc.line(ctx.margin, y + receiptH / 2, ctx.margin + ctx.contentWidth, y + receiptH / 2);
+  doc.line(ctx.margin + ctx.contentWidth * 0.86, y, ctx.margin + ctx.contentWidth * 0.86, y + receiptH);
   doc.setTextColor(18, 24, 35);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("DANFE", danfeX + danfeW / 2, y + 6.8, { align: "center" });
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.3);
-  doc.text("Documento Auxiliar da Nota Fiscal Eletrônica", danfeX + danfeW / 2, y + 10.4, {
+  doc.setFontSize(5.2);
+  doc.text("RECEBEMOS OS PRODUTOS/SERVIÇOS CONSTANTES NA NOTA FISCAL INDICADA ABAIXO", ctx.margin + 1.2, y + 3.2);
+  doc.text("DATA DE RECEBIMENTO", ctx.margin + 16, y + 8.1);
+  doc.text("IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR", ctx.margin + 66, y + 8.1);
+  doc.text("NF-e Nº:", ctx.margin + ctx.contentWidth * 0.86 + 1, y + 3.2);
+  doc.text("SÉRIE:", ctx.margin + ctx.contentWidth * 0.86 + 1, y + 8.1);
+
+  y += receiptH;
+  const leftX = ctx.margin;
+  const danfeX = leftX + leftW;
+  const rightX = danfeX + danfeW;
+
+  doc.rect(leftX, y, leftW, mainH);
+  doc.rect(danfeX, y, danfeW, mainH);
+  doc.rect(rightX, y, rightW, mainH);
+
+  doc.setTextColor(...RED);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.4);
+  doc.text(valueOrDash(nota.emitente.nome), leftX + leftW / 2, y + 12, { align: "center" });
+  doc.setFontSize(6.8);
+  doc.text(fitText(doc, nota.emitente.endereco, leftW - 12, 1), leftX + leftW / 2, y + 20, { align: "center" });
+  doc.text(`${valueOrDash(nota.emitente.municipio)} - ${valueOrDash(nota.emitente.uf)}`, leftX + leftW / 2, y + 24, {
     align: "center",
   });
-  doc.text("0 - Entrada", danfeX + 5, y + 15.2);
-  doc.text("1 - Saída", danfeX + 35, y + 15.2);
-  doc.setFont("helvetica", "bold");
-  // Número e série são placeholders orientativos; o CFOP aparece apenas nos campos próprios.
-  doc.text("Nº 000.000.000", danfeX + 5, y + 20);
-  doc.text("SÉRIE: ____", danfeX + 33, y + 20);
-  doc.text("FOLHA: 1 de 1", danfeX + 5, y + 24);
 
-  const cfopX = danfeX + danfeW;
-  doc.setFillColor(230, 237, 248);
-  doc.rect(cfopX, y, cfopW, 26, "FD");
-  doc.setTextColor(...NAVY);
+  doc.setTextColor(18, 24, 35);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text(`CFOP ${nota.cfop}`, cfopX + cfopW / 2, y + 12, { align: "center" });
-  doc.setFontSize(6.4);
-  doc.text("MODELO ORIENTATIVO", cfopX + cfopW / 2, y + 18, { align: "center" });
+  doc.setFontSize(6.2);
+  doc.text("DANFE", danfeX + danfeW / 2, y + 4.6, { align: "center" });
   doc.setFont("helvetica", "normal");
-  doc.text("sem validade fiscal", cfopX + cfopW / 2, y + 22, { align: "center" });
-  setBaseStyle(doc);
-
-  y += 27.8;
-  drawField(doc, "Chave de acesso", "____________________________________________", ctx.margin, y, ctx.contentWidth, 8, {
-    maxLines: 1,
+  doc.setFontSize(4.9);
+  doc.text(["DOCUMENTO AUXILIAR", "DA NOTA FISCAL", "ELETRÔNICA"], danfeX + danfeW / 2, y + 8.2, {
+    align: "center",
   });
-  return y + 9.5;
-}
+  doc.text("0 - Entrada", danfeX + danfeW / 2, y + 16.6, { align: "center" });
+  doc.text("1 - Saída", danfeX + danfeW / 2, y + 20, { align: "center" });
+  doc.text("Nº 000.000.000", danfeX + danfeW / 2, y + 23.5, { align: "center" });
+  doc.text("SÉRIE: ____", danfeX + danfeW / 2, y + 26.5, { align: "center" });
+  doc.text("FOLHA: 1 de 1", danfeX + danfeW / 2, y + 29, { align: "center" });
 
+  drawExampleBarcode(doc, rightX + 2.3, y + 1.2, rightW - 4.6, 8.8);
+  doc.line(rightX, y + 11, rightX + rightW, y + 11);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(5.2);
+  doc.setTextColor(18, 24, 35);
+  doc.text("CHAVE DE ACESSO (PREENCHER APÓS EMISSÃO DA NF-e)", rightX + 2, y + 14.2);
+  doc.setTextColor(...RED);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.2);
+  doc.text(ACCESS_KEY_PLACEHOLDER, rightX + rightW / 2, y + 18.5, { align: "center" });
+  doc.setTextColor(18, 24, 35);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(5.1);
+  doc.text("Consulta de autenticidade apenas no emissor oficial do produtor rural.", rightX + rightW / 2, y + 24, {
+    align: "center",
+  });
+  doc.text(ORIENTATIVE_TITLE, rightX + rightW / 2, y + 28, { align: "center" });
+
+  return y + mainH + 1.6;
+}
 function drawNatureza(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   drawSectionTitle(doc, ctx, "NATUREZA DA OPERAÇÃO", ctx.margin, y, ctx.contentWidth);
-  y += 5.2;
+  y += 4.4;
   drawField(
     doc,
     "Modelo / Natureza cadastrada",
@@ -237,18 +259,19 @@ function drawNatureza(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
     y,
     ctx.contentWidth * 0.82,
     10,
-    { bold: true },
+    { bold: true, valueColor: RED },
   );
   drawField(doc, "CFOP", nota.cfop, ctx.margin + ctx.contentWidth * 0.82, y, ctx.contentWidth * 0.18, 10, {
     bold: true,
     align: "center",
+    valueColor: RED,
   });
-  return y + 11.5;
+  return y + 10.6;
 }
 
 function drawProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   drawSectionTitle(doc, ctx, "DADOS DO PRODUTO / SERVIÇO", ctx.margin, y, ctx.contentWidth);
-  y += 5.2;
+  y += 4.4;
   autoTable(doc, {
     startY: y,
     margin: { left: ctx.margin, right: ctx.margin, bottom: ctx.pageHeight - ctx.footerTop + 2 },
@@ -289,14 +312,20 @@ function drawProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
       lineColor: BORDER,
       lineWidth: 0.18,
       textColor: [18, 24, 35],
-      valign: "middle",
+      valign: "top",
     },
     headStyles: {
       fillColor: BLUE,
-      textColor: NAVY,
+      textColor: [18, 24, 35],
       fontStyle: "bold",
       halign: "center",
       fontSize: 5.1,
+    },
+    didParseCell: (data) => {
+      if (data.section === "body" && data.column.index <= 8) {
+        data.cell.styles.textColor = RED;
+        data.cell.styles.fontStyle = "bold";
+      }
     },
     columnStyles: {
       0: { cellWidth: 12 },
@@ -320,7 +349,7 @@ function drawProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
 function drawTaxBlock(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   y = ensureSpace(doc, ctx, y, 27);
   drawSectionTitle(doc, ctx, "CÁLCULO DO IMPOSTO", ctx.margin, y, ctx.contentWidth);
-  y += 5.2;
+  y += 4.4;
   const w = ctx.contentWidth / 5;
   const h = 9.6;
   drawField(doc, "Base de cálculo ICMS", "0,00", ctx.margin, y, w, h, { align: "right" });
@@ -330,6 +359,7 @@ function drawTaxBlock(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   drawField(doc, "Valor total produtos", BRL(nota.valorTotal), ctx.margin + w * 4, y, w, h, {
     bold: true,
     align: "right",
+    valueColor: RED,
   });
   y += h;
   drawField(doc, "Valor do frete", "0,00", ctx.margin, y, w, h, { align: "right" });
@@ -339,6 +369,7 @@ function drawTaxBlock(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   drawField(doc, "Valor total da nota", BRL(nota.valorTotal), ctx.margin + w * 4, y, w, h, {
     bold: true,
     align: "right",
+    valueColor: RED,
   });
   return y + h + 1.8;
 }
@@ -346,13 +377,13 @@ function drawTaxBlock(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
 function drawTransportBlock(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   y = ensureSpace(doc, ctx, y, 27);
   drawSectionTitle(doc, ctx, "TRANSPORTADOR / VOLUMES TRANSPORTADOS", ctx.margin, y, ctx.contentWidth);
-  y += 5.2;
+  y += 4.4;
   const h = 9.4;
   const w = ctx.contentWidth;
-  drawField(doc, "Razão social", nota.transportador, ctx.margin, y, w * 0.38, h);
-  drawField(doc, "Frete por conta", nota.tpFrete, ctx.margin + w * 0.38, y, w * 0.17, h);
+  drawField(doc, "Razão social", nota.transportador, ctx.margin, y, w * 0.38, h, { valueColor: RED });
+  drawField(doc, "Frete por conta", nota.tpFrete, ctx.margin + w * 0.38, y, w * 0.17, h, { bold: true, valueColor: RED });
   drawField(doc, "Código ANTT", "-", ctx.margin + w * 0.55, y, w * 0.14, h);
-  drawField(doc, "Placa do veículo", nota.placaVeiculo, ctx.margin + w * 0.69, y, w * 0.16, h);
+  drawField(doc, "Placa do veículo", nota.placaVeiculo, ctx.margin + w * 0.69, y, w * 0.16, h, { valueColor: RED });
   drawField(doc, "UF", "-", ctx.margin + w * 0.85, y, w * 0.05, h, { align: "center" });
   drawField(doc, "CNPJ / CPF", "-", ctx.margin + w * 0.9, y, w * 0.1, h);
   y += h;
@@ -368,7 +399,7 @@ function drawAdditionalData(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number)
   y = ensureSpace(doc, ctx, y, 36);
   const leftW = ctx.contentWidth * 0.68;
   const rightW = ctx.contentWidth - leftW;
-  const titleH = 5.2;
+  const titleH = 4.4;
   const minBodyH = 29;
   const text = valueOrDash(
     nota.observacao ? `${nota.dadosAdicionais || "-"}\n\nObservação: ${nota.observacao}` : nota.dadosAdicionais,
@@ -390,9 +421,9 @@ function drawAdditionalData(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number)
     doc.setDrawColor(...BORDER);
     doc.rect(ctx.margin, currentY + titleH, leftW, bodyH);
     doc.rect(ctx.margin + leftW, currentY + titleH, rightW, bodyH);
-    doc.setTextColor(18, 24, 35);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.2);
+    doc.setTextColor(...RED);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.0);
     doc.text(pageLines, ctx.margin + 2, currentY + titleH + 4.2);
     setBaseStyle(doc);
 
