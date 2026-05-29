@@ -21,7 +21,7 @@ function useUpsert<T extends { id?: string }>(table: TableName) {
     mutationFn: async (record: Partial<T>) => {
       if ((record as { id?: string }).id) {
         const { id, ...rest } = record as Record<string, unknown>;
-        const { error } = await supabase.from(table).update(rest).eq("id", id as string);
+        const { error } = await supabase.from(table).update(rest as never).eq("id", id as string);
         if (error) throw error;
       } else {
         const { error } = await supabase.from(table).insert(record as never);
