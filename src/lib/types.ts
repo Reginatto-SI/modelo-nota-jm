@@ -104,4 +104,7 @@ export interface Grl019Report {
   importedAt: string;
   rows: Grl019Row[];
   empresas: string[];
+  sheetName?: string;
+  headerRow?: number;
+  missingRecommendedColumns?: string[];
 }
