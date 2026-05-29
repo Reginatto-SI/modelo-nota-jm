@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +54,8 @@ export interface ColumnDef<T> {
   key: string;
   label: string;
   render?: (row: T) => React.ReactNode;
+  className?: string;
+  headerClassName?: string;
 }
 
 interface CrudPageProps<T extends { id?: string }> {
@@ -66,6 +69,7 @@ interface CrudPageProps<T extends { id?: string }> {
   searchKeys: (keyof T)[];
   onSave: (rec: Partial<T>) => Promise<unknown> | void;
   onDelete: (id: string) => Promise<unknown> | void;
+  tableDensity?: "default" | "compact";
 }
 
 export function CrudPage<T extends { id?: string; ativo?: boolean }>({
@@ -79,6 +83,7 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
   searchKeys,
   onSave,
   onDelete,
+  tableDensity = "default",
 }: CrudPageProps<T>) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<T>>(empty);
@@ -108,6 +113,7 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
   };
 
   const set = (name: string, value: unknown) => setForm((f) => ({ ...f, [name]: value }));
+  const isCompactTable = tableDensity === "compact";
 
   return (
     <div className="space-y-6">
@@ -131,9 +137,16 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
           <TableHeader>
             <TableRow>
               {columns.map((c) => (
-                <TableHead key={c.key}>{c.label}</TableHead>
+                <TableHead
+                  key={c.key}
+                  className={cn(isCompactTable && "h-10 px-3 py-2", c.headerClassName)}
+                >
+                  {c.label}
+                </TableHead>
               ))}
-              <TableHead className="w-24 text-right">Ações</TableHead>
+              <TableHead className={cn("text-right", isCompactTable ? "h-10 w-20 px-3 py-2" : "w-24")}>
+                Ações
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -151,19 +164,35 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
               </TableRow>
             ) : (
               filtered.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className={cn(isCompactTable && "h-12")}>
                   {columns.map((c) => (
-                    <TableCell key={c.key}>
+                    <TableCell
+                      key={c.key}
+                      className={cn(isCompactTable && "px-3 py-2", c.className)}
+                    >
                       {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "-")}
                     </TableCell>
                   ))}
-                  <TableCell className="text-right">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(row)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" onClick={() => setDelId(row.id!)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                  <TableCell className={cn("text-right", isCompactTable && "px-3 py-2")}>
+                    {/* Compacta as ações em linha para grids desktop sem alterar o comportamento dos botões. */}
+                    <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn(isCompactTable && "h-8 w-8")}
+                        onClick={() => openEdit(row)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn(isCompactTable && "h-8 w-8")}
+                        onClick={() => setDelId(row.id!)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

@@ -19,10 +19,10 @@ const fields: FieldDef[] = [
 ];
 
 const columns: ColumnDef<Cooperativa>[] = [
-  { key: "nome_grl019", label: "Nome GRL019" },
-  { key: "razao_social", label: "Razão Social" },
-  { key: "cnpj", label: "CNPJ" },
-  { key: "ativo", label: "Status", render: (r) => <AtivoBadge ativo={r.ativo} /> },
+  // Grid desktop compacta: Razão Social permanece no formulário, mas não ocupa a listagem principal.
+  { key: "nome_grl019", label: "Nome GRL019", className: "w-full", headerClassName: "w-full" },
+  { key: "cnpj", label: "CNPJ", className: "w-40 whitespace-nowrap", headerClassName: "w-40" },
+  { key: "ativo", label: "Status", className: "w-28", headerClassName: "w-28", render: (r) => <AtivoBadge ativo={r.ativo} /> },
 ];
 
 export default function Cooperativas() {
@@ -38,6 +38,7 @@ export default function Cooperativas() {
         loading={isLoading}
         fields={fields}
         columns={columns}
+        tableDensity="compact"
         empty={{ ativo: true }}
         searchKeys={["nome_grl019", "razao_social", "cnpj"]}
         onSave={(r) => save.mutateAsync(r)}
