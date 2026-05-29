@@ -53,13 +53,35 @@ export default function Pesquisa() {
     );
   }
 
+  const orientarRecebimento = (res: ResolveResult) => {
+    const contrato = res.contratoRecebimentoVinculado ?? res.recebimentoRow?.contrato ?? res.searchedRow.contratoVinculado;
+    if (res.parametrizacaoSuspeitaExpedicao5923) {
+      toast.warning(
+        "Parametrização suspeita: o CFOP 5923 deve ser gerado pela operação casada 5118 + 5923, não diretamente pela expedição.",
+      );
+    }
+    toast(
+      `Este contrato de expedição é usado apenas como vínculo para montar o modelo CFOP 5923. Gere o modelo pelo contrato de recebimento vinculado: ${contrato || "não localizado"}.`,
+    );
+    if (contrato) setQ(contrato);
+  };
+
   const onGerar = (row: Grl019Row) => {
     const res = resolveContrato(report, row, cad);
+    // EXPEDIÇÃO vinculada não gera nota diretamente; ela só alimenta o destinatário do 5923.
+    if (res.expedicaoVinculadaRecebimento) {
+      orientarRecebimento(res);
+      return;
+    }
+    if (res.errors.length > 0) {
+      res.errors.forEach((e) => toast.error(e));
+      return;
+    }
     if (!res.podeGerar) {
       res.warnings.forEach((w) => toast.warning(w));
       if (!res.modelo) return;
     }
-    if (res.cfop === "5118") {
+    if (res.ofereceCasada) {
       setDialog(res);
     } else {
       generate(res, [res.cfop === "5132" ? "5132" : (res.cfop as CfopModelo)]);
@@ -71,7 +93,10 @@ export default function Pesquisa() {
     for (const w of which) {
       const modelo = w === "5923" ? res.modelo5923 : res.modelo;
       if (!modelo) {
-        toast.error(`Modelo CFOP ${w} não está cadastrado para a cooperativa.`);
+        const cooperativa = res.cooperativa?.nome_grl019 ?? res.cooperativa?.razao_social ?? "cooperativa";
+        toast.error(
+          `Modelo CFOP ${w} não encontrado para a cooperativa ${cooperativa}. Verifique se existe um Modelo de Nota ativo com CFOP ${w} vinculado à mesma cooperativa do GRL019.`,
+        );
         continue;
       }
       notas.push(buildNota(res, w, modelo));
@@ -126,12 +151,30 @@ export default function Pesquisa() {
                     <TableCell className="max-w-[160px] truncate">{r.descItem}</TableCell>
                     <TableCell>{r.precoUnitIcms.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</TableCell>
                     <TableCell>
-                      {res.cfop ? <Badge>CFOP {res.cfop}</Badge> : <Badge variant="secondary">Sem param.</Badge>}
+                      {res.errors.length > 0 ? (
+                        <Badge variant="destructive">Erro param.</Badge>
+                      ) : res.expedicaoComoVinculo5923 ? (
+                        <Badge variant="secondary">Vínculo do 5923</Badge>
+                      ) : res.expedicaoVinculadaRecebimento ? (
+                        <Badge variant="secondary">Ver recebimento</Badge>
+                      ) : res.ofereceCasada ? (
+                        <Badge>CFOP 5118 + 5923</Badge>
+                      ) : res.cfop ? (
+                        <Badge>CFOP {res.cfop}</Badge>
+                      ) : (
+                        <Badge variant="secondary">Sem param.</Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button size="sm" variant={res.podeGerar ? "default" : "outline"} onClick={() => onGerar(r)}>
-                        <FileText className="mr-1 h-4 w-4" /> Gerar
-                      </Button>
+                      {res.expedicaoVinculadaRecebimento ? (
+                        <Button size="sm" variant="outline" onClick={() => orientarRecebimento(res)}>
+                          Ver recebimento
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant={res.podeGerar ? "default" : "outline"} onClick={() => onGerar(r)}>
+                          <FileText className="mr-1 h-4 w-4" /> Gerar
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -149,7 +192,7 @@ export default function Pesquisa() {
               Deseja gerar apenas o modelo 5118 ou gerar os modelos 5118 e 5923?
               {dialog && !dialog.modelo5923 && (
                 <span className="mt-2 flex items-center gap-1 text-warning">
-                  <AlertTriangle className="h-4 w-4" /> Modelo 5923 não cadastrado para esta cooperativa.
+                  <AlertTriangle className="h-4 w-4" /> Modelo 5923 não cadastrado ou inativo para esta cooperativa.
                 </span>
               )}
             </AlertDialogDescription>

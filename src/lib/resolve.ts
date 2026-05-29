@@ -33,12 +33,52 @@ export interface ResolveResult {
   armazemPorNome?: boolean; // matched by name, needs validation
   cfop?: string;
   warnings: string[];
+  errors: string[];
   podeGerar: boolean;
-  ofereceCasada: boolean; // 5118 -> ask 5118 or 5118+5923
+  ofereceCasada: boolean; // 5118 + gera_operacao_casada -> ask 5118 or 5118+5923
+  expedicaoComoVinculo5923: boolean;
+  expedicaoVinculadaRecebimento: boolean;
+  contratoRecebimentoVinculado?: string;
+  parametrizacaoSuspeitaExpedicao5923: boolean;
 }
 
 function digits(s: string) {
   return (s || "").replace(/\D/g, "");
+}
+
+function norm(s: string | null | undefined) {
+  return (s ?? "").trim().toLowerCase();
+}
+
+function sameText(a: string | null | undefined, b: string | null | undefined) {
+  return norm(a) === norm(b);
+}
+
+function coopDisplayName(cooperativa?: Cooperativa, fallback?: string) {
+  return cooperativa?.nome_grl019 || cooperativa?.razao_social || fallback || "cooperativa";
+}
+
+function findModeloAtivo(
+  modelos: ModeloNota[],
+  cooperativaId: string,
+  cfop: string,
+  modeloId?: string | null,
+) {
+  if (modeloId) {
+    return modelos.find((m) => m.id === modeloId && m.cooperativa_id === cooperativaId && m.ativo);
+  }
+
+  return modelos.find((m) => m.cooperativa_id === cooperativaId && m.cfop === cfop && m.ativo);
+}
+
+function findTiposAtivos(tipos: TipoContrato[], cooperativaId: string, row: Grl019Row) {
+  return tipos.filter(
+    (t) =>
+      t.ativo &&
+      t.cooperativa_id === cooperativaId &&
+      sameText(t.codigo_contrato, row.codContrato) &&
+      sameText(t.tp_faturamento, row.tpFaturamento),
+  );
 }
 
 export function resolveContrato(
@@ -47,6 +87,7 @@ export function resolveContrato(
   cad: CadastrosBundle,
 ): ResolveResult {
   const warnings: string[] = [];
+  const errors: string[] = [];
 
   // recebimento / expedição pair
   const vinculado = findVinculado(report, searchedRow);
@@ -63,50 +104,102 @@ export function resolveContrato(
     expedicaoRow = vinculado;
   }
 
-  // cooperativa by EMPRESA
-  const empresa = searchedRow.empresa.trim().toLowerCase();
-  const cooperativa = cad.cooperativas.find((c) => c.nome_grl019.trim().toLowerCase() === empresa);
+  // cooperativa by EMPRESA from GRL019 against the cadastro field that stores the GRL019 name.
+  const empresa = norm(searchedRow.empresa);
+  const cooperativa = cad.cooperativas.find((c) => norm(c.nome_grl019) === empresa && c.ativo);
   if (!cooperativa) {
-    warnings.push(`Cooperativa "${searchedRow.empresa}" não está cadastrada.`);
+    errors.push(`Cooperativa "${searchedRow.empresa}" não está cadastrada ou ativa.`);
   }
 
-  // tipo de contrato by codigo + cooperativa
+  const isExpedicao = searchedRow.tpFaturamento.includes("EXPED");
+  const isExpedicaoVinculadaRecebimento = Boolean(
+    isExpedicao && recebimentoRow && recebimentoRow !== searchedRow && recebimentoRow.tpFaturamento.includes("RECEB"),
+  );
+
+  // Linha de EXPEDIÇÃO vinculada não é geração principal: a parametrização principal é a do RECEBIMENTO.
+  const linhaParametrizacao = isExpedicaoVinculadaRecebimento ? recebimentoRow! : searchedRow;
+
+  // Tipo de contrato must be resolved by cooperativa + COD.CONTRATO + TP FATURAMENTO + active status.
+  // Keeping this central prevents the table badge and the Generate action from diverging.
   let tipoContrato: TipoContrato | undefined;
   if (cooperativa) {
-    tipoContrato = cad.tipos.find(
-      (t) => t.cooperativa_id === cooperativa.id && t.codigo_contrato.trim() === searchedRow.codContrato.trim(),
-    );
-    if (!tipoContrato) {
-      warnings.push(
-        `Tipo de contrato código "${searchedRow.codContrato}" não está parametrizado para esta cooperativa.`,
+    const tiposAtivos = findTiposAtivos(cad.tipos, cooperativa.id, linhaParametrizacao);
+
+    if (tiposAtivos.length > 1) {
+      errors.push(
+        `Existe mais de uma parametrização ativa para o contrato ${linhaParametrizacao.codContrato} / ${linhaParametrizacao.tpFaturamento} / ${coopDisplayName(cooperativa)}. Revise o cadastro de Tipos de Contrato antes de gerar o modelo.`,
+      );
+    } else {
+      tipoContrato = tiposAtivos[0];
+    }
+
+    if (!tipoContrato && tiposAtivos.length === 0) {
+      errors.push(
+        `Tipo de contrato não parametrizado para ${coopDisplayName(cooperativa)}: código ${linhaParametrizacao.codContrato}, faturamento ${linhaParametrizacao.tpFaturamento}.`,
       );
     }
   }
 
-  // modelo from tipo (CFOP comes from parametrization, NOT from GRL019 description)
+  // Modelo comes from Tipos de Contrato and is validated against the same cooperativa and active status.
   let modelo: ModeloNota | undefined;
-  if (tipoContrato) {
-    modelo = cad.modelos.find((m) => m.id === tipoContrato!.modelo_nota_id);
+  if (tipoContrato && cooperativa) {
+    const cfopParametrizado = tipoContrato.cfop?.trim() || "";
+    modelo = findModeloAtivo(cad.modelos, cooperativa.id, cfopParametrizado, tipoContrato.modelo_nota_id);
     if (!modelo) {
-      warnings.push("O tipo de contrato não possui modelo de nota vinculado.");
+      errors.push(
+        `Modelo CFOP ${cfopParametrizado || "vinculado"} não encontrado para a cooperativa ${coopDisplayName(cooperativa)}. Verifique se existe um Modelo de Nota ativo com CFOP ${cfopParametrizado || "compatível"} vinculado à mesma cooperativa do GRL019.`,
+      );
+    } else if (cfopParametrizado && modelo.cfop !== cfopParametrizado) {
+      errors.push(
+        `O tipo de contrato ${linhaParametrizacao.codContrato} aponta para CFOP ${cfopParametrizado}, mas o modelo vinculado está cadastrado como CFOP ${modelo.cfop}. Revise o cadastro de Tipos de Contrato.`,
+      );
+      modelo = undefined;
     }
   }
 
   const cfop = modelo?.cfop;
-  const ofereceCasada = cfop === "5118";
+  const ofereceCasada = cfop === "5118" && Boolean(tipoContrato?.gera_operacao_casada);
+  const expedicaoComoVinculo5923 = isExpedicaoVinculadaRecebimento && ofereceCasada;
+
+  let parametrizacaoSuspeitaExpedicao5923 = false;
+  if (cooperativa && isExpedicao) {
+    const tiposExpedicaoAtivos = findTiposAtivos(cad.tipos, cooperativa.id, searchedRow);
+    parametrizacaoSuspeitaExpedicao5923 = tiposExpedicaoAtivos.some((tipo) => {
+      const cfopTipo = tipo.cfop?.trim();
+      const modeloTipo = findModeloAtivo(cad.modelos, cooperativa.id, cfopTipo || "5923", tipo.modelo_nota_id);
+      return cfopTipo === "5923" || modeloTipo?.cfop === "5923";
+    });
+
+    if (parametrizacaoSuspeitaExpedicao5923) {
+      warnings.push(
+        "Parametrização suspeita: o CFOP 5923 deve ser gerado pela operação casada 5118 + 5923, não diretamente pela expedição.",
+      );
+    }
+
+    if (!isExpedicaoVinculadaRecebimento && cfop === "5923") {
+      errors.push(
+        "Parametrização suspeita: o CFOP 5923 deve ser gerado pela operação casada 5118 + 5923, não diretamente pela expedição.",
+      );
+    }
+  }
 
   // model 5923 (operação casada) for the same cooperativa
   let modelo5923: ModeloNota | undefined;
   if (ofereceCasada && cooperativa) {
-    modelo5923 = cad.modelos.find((m) => m.cooperativa_id === cooperativa.id && m.cfop === "5923");
+    modelo5923 = findModeloAtivo(cad.modelos, cooperativa.id, "5923");
+    if (!modelo5923) {
+      errors.push(
+        `O tipo de contrato gera operação casada, mas o modelo CFOP 5923 não está cadastrado ou ativo para a cooperativa ${coopDisplayName(cooperativa)}.`,
+      );
+    }
   }
 
   // produto by COD.ITEM
   const produto = cad.produtos.find(
-    (p) => p.codigo_produto.trim() === searchedRow.codItem.trim(),
+    (p) => p.ativo && p.codigo_produto.trim() === searchedRow.codItem.trim(),
   );
   if (!produto) {
-    warnings.push(`Produto código "${searchedRow.codItem}" não está cadastrado.`);
+    warnings.push(`Produto código "${searchedRow.codItem}" não está cadastrado ou ativo.`);
   } else if (!produto.ncm || !produto.cst_icms) {
     warnings.push("Produto cadastrado sem NCM ou CST.");
   }
@@ -118,11 +211,11 @@ export function resolveContrato(
     const exped = expedicaoRow;
     const cnpj = digits(exped.cpfCnpj);
     if (cnpj) {
-      armazem = cad.armazens.find((a) => digits(a.cnpj_cpf || "") === cnpj);
+      armazem = cad.armazens.find((a) => a.ativo && digits(a.cnpj_cpf || "") === cnpj);
     }
     if (!armazem && exped.nomeRazaoSocial) {
       armazem = cad.armazens.find(
-        (a) => a.razao_social.trim().toLowerCase() === exped.nomeRazaoSocial.trim().toLowerCase(),
+        (a) => a.ativo && a.razao_social.trim().toLowerCase() === exped.nomeRazaoSocial.trim().toLowerCase(),
       );
       if (armazem) {
         armazemPorNome = true;
@@ -130,11 +223,20 @@ export function resolveContrato(
       }
     }
     if (!armazem) {
-      warnings.push("Armazém/destinatário do contrato de expedição não está cadastrado.");
+      warnings.push("Armazém/destinatário do contrato de expedição não está cadastrado ou ativo.");
     }
   }
 
-  const podeGerar = Boolean(cooperativa && tipoContrato && modelo && produto && produto?.ncm && produto?.cst_icms);
+  const podeGerar = Boolean(
+    cooperativa &&
+      tipoContrato &&
+      modelo &&
+      produto &&
+      produto?.ncm &&
+      produto?.cst_icms &&
+      errors.length === 0 &&
+      !isExpedicaoVinculadaRecebimento,
+  );
 
   return {
     searchedRow,
@@ -149,7 +251,12 @@ export function resolveContrato(
     armazemPorNome,
     cfop,
     warnings,
+    errors,
     podeGerar,
     ofereceCasada,
+    expedicaoComoVinculo5923,
+    expedicaoVinculadaRecebimento: isExpedicaoVinculadaRecebimento,
+    contratoRecebimentoVinculado: isExpedicaoVinculadaRecebimento ? recebimentoRow?.contrato : undefined,
+    parametrizacaoSuspeitaExpedicao5923,
   };
 }
