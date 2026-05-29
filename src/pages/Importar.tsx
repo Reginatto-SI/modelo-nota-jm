@@ -2,29 +2,78 @@ import { useRef, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, FileSpreadsheet, RefreshCw, Trash2, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Upload, FileSpreadsheet, RefreshCw, Trash2, CheckCircle2, AlertTriangle, Copy } from "lucide-react";
 import { useReport } from "@/context/ReportContext";
-import { parseGrl019, summarize } from "@/lib/grl019";
+import { parseGrl019, summarize, type ImportDiagnostics } from "@/lib/grl019";
 import { useCooperativas } from "@/lib/db";
+import type { Grl019Report } from "@/lib/types";
 import { toast } from "sonner";
+
+type PendingImport = {
+  report: Grl019Report;
+  missingRecommendedColumns: string[];
+};
 
 export default function Importar() {
   const { report, setReport, removeReport } = useReport();
   const { data: coops = [] } = useCooperativas();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<ImportDiagnostics | null>(null);
+  const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
+
+  const saveParsedReport = async (nextReport: Grl019Report, missingRecommendedColumns: string[]) => {
+    await setReport(nextReport);
+    const warning = missingRecommendedColumns.length
+      ? ` Atenção: colunas recomendadas ausentes: ${missingRecommendedColumns.join(", ")}.`
+      : "";
+    toast.success(`Relatório importado: ${nextReport.rows.length} linhas.${warning}`);
+  };
 
   const handleFile = async (file: File) => {
     setBusy(true);
     const res = await parseGrl019(file);
     setBusy(false);
-    if (res.error) return toast.error(res.error);
-    if (res.missingColumns.length) {
-      return toast.error("Arquivo inválido. Colunas ausentes: " + res.missingColumns.join(", "));
+
+    if (res.error) {
+      setDiagnostics(res.diagnostics);
+      toast.error("Falha ao ler o arquivo. Veja o diagnóstico da importação.");
+      return;
     }
+
+    if (res.missingColumns.length) {
+      // Erro crítico precisa ficar persistente: o toast some rápido e não comporta o diagnóstico do GRL019.
+      setDiagnostics(res.diagnostics);
+      toast.error("Arquivo inválido. Veja o diagnóstico da importação.");
+      return;
+    }
+
     if (res.report) {
-      await setReport(res.report);
-      toast.success(`Relatório importado: ${res.report.rows.length} linhas.`);
+      if (report) {
+        // Substituir o GRL019 salvo muda toda a base local usada nas pesquisas; por isso exige confirmação.
+        setPendingImport({ report: res.report, missingRecommendedColumns: res.missingRecommendedColumns });
+        return;
+      }
+
+      await saveParsedReport(res.report, res.missingRecommendedColumns);
     }
   };
 
@@ -80,6 +129,8 @@ export default function Importar() {
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Info label="Arquivo" value={report.fileName} />
+              <Info label="Aba lida" value={report.sheetName ?? "-"} />
+              <Info label="Linha do cabeçalho" value={report.headerRow ? String(report.headerRow) : "-"} ok={!!report.headerRow} />
               <Info label="Importado em" value={new Date(report.importedAt).toLocaleString("pt-BR")} />
               <Info label="Linhas" value={String(summary.totalLinhas)} />
               <Info label="Cooperativa (EMPRESA)" value={empresa ?? "-"} />
@@ -93,11 +144,163 @@ export default function Importar() {
               <Info label="Contratos expedição" value={String(summary.expedicao)} />
               <Info label="Vínculos localizados" value={String(summary.vinculoLocalizado)} ok />
               <Info label="Vínculos ausentes" value={String(summary.vinculoAusente)} warn={summary.vinculoAusente > 0} />
+              {report.missingRecommendedColumns?.length ? (
+                <Info
+                  label="Colunas recomendadas ausentes"
+                  value={report.missingRecommendedColumns.join(", ")}
+                  warn
+                />
+              ) : null}
             </CardContent>
           </Card>
         )}
       </div>
+
+      <ImportDiagnosticsDialog diagnostics={diagnostics} onOpenChange={(open) => !open && setDiagnostics(null)} />
+
+      <AlertDialog open={!!pendingImport} onOpenChange={(open) => !open && setPendingImport(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Substituir relatório GRL019?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Já existe um GRL019 importado neste navegador. Deseja substituir pelo novo relatório?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!pendingImport) return;
+                const nextImport = pendingImport;
+                setPendingImport(null);
+                await saveParsedReport(nextImport.report, nextImport.missingRecommendedColumns);
+              }}
+            >
+              Substituir relatório
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
+  );
+}
+
+function ImportDiagnosticsDialog({
+  diagnostics,
+  onOpenChange,
+}: {
+  diagnostics: ImportDiagnostics | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const copyDiagnostics = async () => {
+    if (!diagnostics) return;
+
+    const text = [
+      "Diagnóstico de importação GRL019",
+      `Arquivo: ${diagnostics.fileName}`,
+      `Aba lida: ${diagnostics.sheetName}`,
+      `Linha de cabeçalho detectada: ${diagnostics.headerRow ?? "não identificada"}`,
+      `Quantidade de colunas encontradas: ${diagnostics.foundColumnCount}`,
+      `Colunas encontradas no arquivo: ${diagnostics.foundColumns.join(", ") || "nenhuma"}`,
+      `Colunas reconhecidas pelo sistema: ${diagnostics.recognizedColumns.join(", ") || "nenhuma"}`,
+      `Colunas obrigatórias ausentes: ${diagnostics.missingColumns.join(", ") || "nenhuma"}`,
+      `Colunas recomendadas ausentes: ${diagnostics.missingRecommendedColumns.join(", ") || "nenhuma"}`,
+      `Erro: ${diagnostics.errorMessage ?? "-"}`,
+    ].join("\n");
+
+    await navigator.clipboard.writeText(text);
+    toast.success("Diagnóstico copiado.");
+  };
+
+  return (
+    <Dialog open={!!diagnostics} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Não foi possível importar o GRL019</DialogTitle>
+          <DialogDescription>
+            O sistema não encontrou todas as colunas obrigatórias do GRL019. Verifique se o arquivo importado é o
+            relatório correto e se o cabeçalho está na linha esperada.
+          </DialogDescription>
+        </DialogHeader>
+
+        {diagnostics && (
+          <div className="space-y-4 text-sm">
+            <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-3">
+              <Info label="Arquivo selecionado" value={diagnostics.fileName} />
+              <Info label="Aba lida" value={diagnostics.sheetName} />
+              <Info
+                label="Linha do cabeçalho"
+                value={diagnostics.headerRow ? String(diagnostics.headerRow) : "Não identificada"}
+                warn={!diagnostics.headerRow}
+              />
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-semibold">Colunas obrigatórias esperadas</h3>
+              <ColumnList columns={diagnostics.requiredColumns} />
+            </div>
+
+            {diagnostics.errorMessage && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3">
+                <p className="font-semibold text-destructive">Erro</p>
+                <p className="text-muted-foreground">{diagnostics.errorMessage}</p>
+              </div>
+            )}
+
+            <div>
+              <h3 className="mb-2 font-semibold">Colunas encontradas no arquivo ({diagnostics.foundColumnCount})</h3>
+              <ColumnList columns={diagnostics.foundColumns} empty="Nenhuma coluna encontrada na linha de cabeçalho." />
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-semibold">Colunas reconhecidas pelo sistema ({diagnostics.recognizedColumnCount})</h3>
+              <ColumnList columns={diagnostics.recognizedColumns} empty="Nenhuma coluna do GRL019 foi reconhecida." />
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-semibold text-destructive">Colunas obrigatórias ausentes</h3>
+              <ColumnList columns={diagnostics.missingColumns} empty="Nenhuma coluna obrigatória ausente." />
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-semibold text-warning">Colunas recomendadas ausentes</h3>
+              <ColumnList columns={diagnostics.missingRecommendedColumns} empty="Nenhuma coluna recomendada ausente." />
+            </div>
+
+            <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+              <p className="font-semibold">Como corrigir</p>
+              <p className="text-muted-foreground">
+                Gere novamente o GRL019 ou ajuste a planilha para manter o cabeçalho original do relatório. O cabeçalho
+                normalmente fica na linha 6, mas o sistema tenta localizar automaticamente a linha correta.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={copyDiagnostics} disabled={!diagnostics}>
+            <Copy className="mr-1 h-4 w-4" /> Copiar diagnóstico
+          </Button>
+          <Button onClick={() => onOpenChange(false)}>Entendi</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ColumnList({ columns, empty }: { columns: string[]; empty?: string }) {
+  if (columns.length === 0) {
+    return <p className="rounded-md border bg-muted/30 p-3 text-muted-foreground">{empty ?? "Nenhuma coluna."}</p>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {columns.map((column) => (
+        <span key={column} className="rounded-full border bg-background px-3 py-1 text-xs font-medium">
+          {column}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -108,7 +311,7 @@ function Info({ label, value, ok, warn }: { label: string; value: string; ok?: b
       <div className="flex items-center gap-1 font-semibold">
         {ok && <CheckCircle2 className="h-4 w-4 text-success" />}
         {warn && <AlertTriangle className="h-4 w-4 text-warning" />}
-        <span className="truncate">{value}</span>
+        <span className="truncate" title={value}>{value}</span>
       </div>
     </div>
   );
