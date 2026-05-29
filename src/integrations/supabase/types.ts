@@ -14,7 +14,254 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      armazens: {
+        Row: {
+          ativo: boolean
+          bairro: string | null
+          cep: string | null
+          cnpj_cpf: string | null
+          created_at: string
+          endereco: string | null
+          id: string
+          inscricao_estadual: string | null
+          municipio: string | null
+          razao_social: string
+          telefone: string | null
+          tipo: string
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cnpj_cpf?: string | null
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          municipio?: string | null
+          razao_social: string
+          telefone?: string | null
+          tipo?: string
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cnpj_cpf?: string | null
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          municipio?: string | null
+          razao_social?: string
+          telefone?: string | null
+          tipo?: string
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cooperativas: {
+        Row: {
+          ativo: boolean
+          bairro: string | null
+          cep: string | null
+          cnpj: string | null
+          created_at: string
+          email: string | null
+          endereco: string | null
+          id: string
+          inscricao_estadual: string | null
+          municipio: string | null
+          nome_grl019: string
+          razao_social: string
+          telefone: string | null
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cnpj?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          municipio?: string | null
+          nome_grl019: string
+          razao_social: string
+          telefone?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cnpj?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          municipio?: string | null
+          nome_grl019?: string
+          razao_social?: string
+          telefone?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      modelos_nota: {
+        Row: {
+          ativo: boolean
+          cfop: string
+          cooperativa_id: string
+          created_at: string
+          dados_adicionais_template: string | null
+          id: string
+          natureza_operacao: string | null
+          nome_modelo: string
+          tipo_destinatario: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cfop: string
+          cooperativa_id: string
+          created_at?: string
+          dados_adicionais_template?: string | null
+          id?: string
+          natureza_operacao?: string | null
+          nome_modelo: string
+          tipo_destinatario?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cfop?: string
+          cooperativa_id?: string
+          created_at?: string
+          dados_adicionais_template?: string | null
+          id?: string
+          natureza_operacao?: string | null
+          nome_modelo?: string
+          tipo_destinatario?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "modelos_nota_cooperativa_id_fkey"
+            columns: ["cooperativa_id"]
+            isOneToOne: false
+            referencedRelation: "cooperativas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      produtos: {
+        Row: {
+          ativo: boolean
+          codigo_produto: string
+          created_at: string
+          cst_icms: string | null
+          descricao: string
+          id: string
+          ncm: string | null
+          unidade: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo_produto: string
+          created_at?: string
+          cst_icms?: string | null
+          descricao: string
+          id?: string
+          ncm?: string | null
+          unidade?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo_produto?: string
+          created_at?: string
+          cst_icms?: string | null
+          descricao?: string
+          id?: string
+          ncm?: string | null
+          unidade?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tipos_contrato: {
+        Row: {
+          ativo: boolean
+          cfop: string | null
+          codigo_contrato: string
+          cooperativa_id: string
+          created_at: string
+          descricao_contrato: string | null
+          exige_contrato_vinculado: boolean
+          gera_operacao_casada: boolean
+          id: string
+          modelo_nota_id: string | null
+          tp_faturamento: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cfop?: string | null
+          codigo_contrato: string
+          cooperativa_id: string
+          created_at?: string
+          descricao_contrato?: string | null
+          exige_contrato_vinculado?: boolean
+          gera_operacao_casada?: boolean
+          id?: string
+          modelo_nota_id?: string | null
+          tp_faturamento?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cfop?: string | null
+          codigo_contrato?: string
+          cooperativa_id?: string
+          created_at?: string
+          descricao_contrato?: string | null
+          exige_contrato_vinculado?: boolean
+          gera_operacao_casada?: boolean
+          id?: string
+          modelo_nota_id?: string | null
+          tp_faturamento?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipos_contrato_cooperativa_id_fkey"
+            columns: ["cooperativa_id"]
+            isOneToOne: false
+            referencedRelation: "cooperativas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tipos_contrato_modelo_nota_id_fkey"
+            columns: ["modelo_nota_id"]
+            isOneToOne: false
+            referencedRelation: "modelos_nota"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
