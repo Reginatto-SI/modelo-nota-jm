@@ -82,6 +82,7 @@ export interface TipoContrato {
 export interface Grl019Row {
   contrato: string;
   contratoVinculado: string;
+  contratoCliente: string;
   empresa: string;
   tpFaturamento: string;
   codContrato: string;
