@@ -204,10 +204,11 @@ export function resolveContrato(
     warnings.push("Produto cadastrado sem NCM ou CST.");
   }
 
-  // armazém (only needed for 5923) — by CPF/CNPJ of expedição row, fallback by name
+  // armazém/destinatário — sempre que houver linha de expedição vinculada, para preencher
+  // as variáveis {{armazem_*}} dos modelos (5118, 5132, 5923). Busca por CPF/CNPJ e cai para nome.
   let armazem: Armazem | undefined;
   let armazemPorNome = false;
-  if (ofereceCasada && expedicaoRow) {
+  if (expedicaoRow) {
     const exped = expedicaoRow;
     const cnpj = digits(exped.cpfCnpj);
     if (cnpj) {
@@ -222,7 +223,8 @@ export function resolveContrato(
         warnings.push("Armazém/destinatário localizado por NOME (não por CPF/CNPJ). Valide os dados.");
       }
     }
-    if (!armazem) {
+    // Só alerta sobre cadastro ausente quando o armazém é obrigatório (operação casada 5923).
+    if (!armazem && ofereceCasada) {
       warnings.push("Armazém/destinatário do contrato de expedição não está cadastrado ou ativo.");
     }
   }

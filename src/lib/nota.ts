@@ -53,20 +53,37 @@ const EMPTY_PARTY: NotaParty = {
 function buildVars(n: Nota, r: ResolveResult): Record<string, string> {
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Placeholder de revisão manual quando o dado não existe em nenhuma origem.
+  const ph = (v: string | null | undefined) => {
+    const t = (v ?? "").toString().trim();
+    return t ? t : "####";
+  };
+  const exped = r.expedicaoRow;
+  // Nome/CNPJ/IE: cadastro do armazém primeiro; se ausente, dados da linha de EXPEDIÇÃO do GRL019.
+  const armazemNome = r.armazem?.razao_social || exped?.nomeRazaoSocial || "";
+  const armazemCnpj = r.armazem?.cnpj_cpf || exped?.cpfCnpj || "";
+  const armazemIe = r.armazem?.inscricao_estadual || exped?.ie || "";
+  // Endereço/Município/UF: preferir cadastro; cair para a expedição quando o cadastro não tiver.
+  const armazemEndereco = r.armazem?.endereco || exped?.endereco || "";
+  const armazemMunicipio = r.armazem?.municipio || exped?.municipio || "";
+  const armazemUf = r.armazem?.uf || exped?.estado || "";
   return {
-    contrato: r.searchedRow.contrato,
-    contrato_vinculado: r.searchedRow.contratoVinculado,
-    produtor_nome: n.emitente.nome,
-    produtor_cpf_cnpj: n.emitente.cpfCnpj,
-    produtor_ie: n.emitente.ie,
-    cooperativa_nome: r.cooperativa?.razao_social ?? "",
-    cooperativa_cnpj: r.cooperativa?.cnpj ?? "",
-    cooperativa_ie: r.cooperativa?.inscricao_estadual ?? "",
-    armazem_nome: r.armazem?.razao_social ?? "",
-    armazem_cnpj: r.armazem?.cnpj_cpf ?? "",
-    armazem_ie: r.armazem?.inscricao_estadual ?? "",
-    produto: n.produto.descricao,
-    ncm: n.produto.ncm,
+    contrato: ph(r.searchedRow.contrato),
+    contrato_vinculado: ph(r.searchedRow.contratoVinculado),
+    produtor_nome: ph(n.emitente.nome),
+    produtor_cpf_cnpj: ph(n.emitente.cpfCnpj),
+    produtor_ie: ph(n.emitente.ie),
+    cooperativa_nome: ph(r.cooperativa?.razao_social),
+    cooperativa_cnpj: ph(r.cooperativa?.cnpj),
+    cooperativa_ie: ph(r.cooperativa?.inscricao_estadual),
+    armazem_nome: ph(armazemNome),
+    armazem_cnpj: ph(armazemCnpj),
+    armazem_ie: ph(armazemIe),
+    armazem_endereco: ph(armazemEndereco),
+    armazem_municipio: ph(armazemMunicipio),
+    armazem_uf: ph(armazemUf),
+    produto: ph(n.produto.descricao),
+    ncm: ph(n.produto.ncm),
     quantidade: fmt(n.quantidade),
     valor_unitario: fmt(n.valorUnitario),
     valor_total: fmt(n.valorTotal),
@@ -83,9 +100,11 @@ function buildVars(n: Nota, r: ResolveResult): Record<string, string> {
 export function renderTemplate(template: string, vars: Record<string, string>): string {
   return (template || "").replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_, key: string) => {
     const v = vars[key.toLowerCase()];
-    return v != null ? v : `{{${key}}}`;
+    // Nunca deixa a variável crua no texto: dado ausente vira placeholder de revisão manual.
+    return v != null ? v : "####";
   });
 }
+
 
 export function hasPendingPlaceholders(text: string): boolean {
   return /#{2,}|\{\{[a-z_]+\}\}/i.test(text);
