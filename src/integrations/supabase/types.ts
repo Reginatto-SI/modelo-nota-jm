@@ -130,6 +130,7 @@ export type Database = {
           natureza_operacao: string | null
           nome_modelo: string
           tipo_destinatario: string
+          tipo_frete_padrao: string | null
           updated_at: string
         }
         Insert: {
@@ -142,6 +143,7 @@ export type Database = {
           natureza_operacao?: string | null
           nome_modelo: string
           tipo_destinatario?: string
+          tipo_frete_padrao?: string | null
           updated_at?: string
         }
         Update: {
@@ -154,6 +156,7 @@ export type Database = {
           natureza_operacao?: string | null
           nome_modelo?: string
           tipo_destinatario?: string
+          tipo_frete_padrao?: string | null
           updated_at?: string
         }
         Relationships: [

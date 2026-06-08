@@ -1,7 +1,8 @@
 import type { ModeloNota } from "./types";
+import { normalizeTipoFrete } from "./tipoFrete";
 import { QUANTIDADE_PADRAO, SACA_KG, type ResolveResult } from "./resolve";
 
-export type CfopModelo = "5118" | "5923" | "5132";
+export type CfopModelo = "5118" | "5923" | "5132" | "5133";
 
 export interface NotaParty {
   nome: string;
@@ -163,7 +164,8 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
     dataEmissao: todayISO(),
     dataSaida: todayISO(),
     horaSaida: "",
-    tpFrete: rec.tpFrete,
+    // O frete inicial vem do modelo; se ausente, aplica o fallback solicitado.
+    tpFrete: normalizeTipoFrete(modelo.tipo_frete_padrao),
     placaVeiculo: "",
     transportador: "",
     dadosAdicionais: "",
