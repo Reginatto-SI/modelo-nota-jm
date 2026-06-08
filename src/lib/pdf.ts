@@ -160,16 +160,66 @@ function drawPartyBlock(
   return y + 4.4 + rowH * 2;
 }
 
-function drawExampleBarcode(doc: jsPDF, x: number, y: number, w: number, h: number) {
-  // Código de barras meramente visual para aproximar do DANFE legado, sem representar uma chave fiscal válida.
-  const pattern = [1, 1, 2, 1, 3, 1, 1, 2, 2, 1, 4, 1, 1, 1, 3, 2, 1, 2, 4, 1, 2, 1, 1, 3, 3, 1, 1, 2, 2, 2, 4, 1, 1, 1, 2, 3, 1, 2];
-  const unit = w / pattern.reduce((sum, n) => sum + n, 0);
-  let cursor = x;
+type VisualBarcodeSegment = { bar: number; gap: number };
+
+const DANFE_VISUAL_BARCODE: VisualBarcodeSegment[] = [
+  { bar: 1, gap: 1 },
+  { bar: 3, gap: 1 },
+  { bar: 1, gap: 2 },
+  { bar: 2, gap: 1 },
+  { bar: 1, gap: 1 },
+  { bar: 4, gap: 2 },
+  { bar: 2, gap: 1 },
+  { bar: 1, gap: 3 },
+  { bar: 3, gap: 1 },
+  { bar: 1, gap: 1 },
+  { bar: 2, gap: 2 },
+  { bar: 5, gap: 1 },
+  { bar: 1, gap: 2 },
+  { bar: 2, gap: 1 },
+  { bar: 1, gap: 1 },
+  { bar: 4, gap: 3 },
+  { bar: 1, gap: 1 },
+  { bar: 3, gap: 2 },
+  { bar: 2, gap: 1 },
+  { bar: 1, gap: 2 },
+  { bar: 5, gap: 1 },
+  { bar: 1, gap: 1 },
+  { bar: 2, gap: 2 },
+  { bar: 3, gap: 1 },
+  { bar: 1, gap: 3 },
+  { bar: 2, gap: 1 },
+  { bar: 1, gap: 1 },
+  { bar: 4, gap: 2 },
+  { bar: 2, gap: 1 },
+  { bar: 1, gap: 2 },
+  { bar: 3, gap: 1 },
+  { bar: 1, gap: 1 },
+  { bar: 5, gap: 2 },
+  { bar: 2, gap: 1 },
+  { bar: 1, gap: 3 },
+  { bar: 3, gap: 1 },
+  { bar: 1, gap: 2 },
+  { bar: 2, gap: 1 },
+  { bar: 4, gap: 1 },
+  { bar: 1, gap: 2 },
+  { bar: 2, gap: 1 },
+  { bar: 1, gap: 1 },
+];
+
+function drawDanfeVisualBarcode(doc: jsPDF, x: number, y: number, w: number, h: number) {
+  // Desenho fixo e meramente visual: não codifica a chave de acesso nem representa dado fiscal escaneável.
+  const quietZone = w * 0.015;
+  const usableWidth = w - quietZone * 2;
+  const totalModules = DANFE_VISUAL_BARCODE.reduce((sum, segment) => sum + segment.bar + segment.gap, 0);
+  const unit = usableWidth / totalModules;
+  let cursor = x + quietZone;
+
   doc.setFillColor(0, 0, 0);
-  pattern.forEach((bar, index) => {
+  DANFE_VISUAL_BARCODE.forEach(({ bar, gap }) => {
     const barW = bar * unit;
-    if (index % 2 === 0) doc.rect(cursor, y, barW, h, "F");
-    cursor += barW;
+    doc.rect(cursor, y, barW, h, "F");
+    cursor += barW + gap * unit;
   });
 }
 
@@ -228,7 +278,7 @@ function drawHeaderAndDanfe(doc: jsPDF, ctx: DrawContext, nota: Nota) {
   doc.text("SÉRIE: ____", danfeX + danfeW / 2, y + 26.5, { align: "center" });
   doc.text("FOLHA: 1 de 1", danfeX + danfeW / 2, y + 29, { align: "center" });
 
-  drawExampleBarcode(doc, rightX + 2.3, y + 1.2, rightW - 4.6, 8.8);
+  drawDanfeVisualBarcode(doc, rightX + 2.3, y + 1.2, rightW - 4.6, 8.8);
   doc.line(rightX, y + 11, rightX + rightW, y + 11);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(5.2);
