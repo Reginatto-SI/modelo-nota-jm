@@ -4,6 +4,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,11 +14,40 @@ import { hasPendingPlaceholders } from "@/lib/nota";
 import { generatePdf } from "@/lib/pdf";
 import { toast } from "sonner";
 
+// Opções fixas de frete da NF-e, sem cadastro ou dependência de banco de dados.
+const TIPO_FRETE_OPTIONS = [
+  "0 - Por conta do Emitente",
+  "1 - Por conta do Destinatário/Remetente",
+  "2 - Por conta de Terceiros",
+  "3 - Transporte próprio por conta do Remetente",
+  "4 - Transporte próprio por conta do Destinatário",
+  "9 - Sem cobrança de frete",
+] as const;
+
+const TIPO_FRETE_DEFAULT = "1 - Por conta do Destinatário/Remetente";
+
+function normalizeTipoFrete(value?: string | null) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  if (!normalized) return TIPO_FRETE_DEFAULT;
+  const byCodeOrLabel = TIPO_FRETE_OPTIONS.find(
+    (option) => option.startsWith(normalized) || option.toLowerCase() === normalized,
+  );
+  if (byCodeOrLabel) return byCodeOrLabel;
+
+  if (["não paga frete", "nao paga frete", "sem cobranca de frete", "sem cobrança de frete"].includes(normalized)) {
+    return "9 - Sem cobrança de frete";
+  }
+
+  return TIPO_FRETE_DEFAULT;
+}
+
 export default function Preview() {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as { notas: Nota[]; warnings: string[] } | null;
-  const [notas, setNotas] = useState<Nota[]>(state?.notas ?? []);
+  const [notas, setNotas] = useState<Nota[]>(() =>
+    (state?.notas ?? []).map((nota) => ({ ...nota, tpFrete: normalizeTipoFrete(nota.tpFrete) })),
+  );
 
   if (!state || notas.length === 0) return <Navigate to="/pesquisa" replace />;
 
@@ -86,7 +116,7 @@ export default function Preview() {
                     <Label>Valor total</Label>
                     <Input readOnly value={n.valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} />
                   </div>
-                  <F label="Tipo de frete" value={n.tpFrete} onChange={(v) => update(i, { tpFrete: v })} />
+                  <TipoFreteSelect value={n.tpFrete} onChange={(v) => update(i, { tpFrete: v })} />
                   <F label="Placa do veículo" value={n.placaVeiculo} onChange={(v) => update(i, { placaVeiculo: v })} />
                   <F label="Transportador" value={n.transportador} onChange={(v) => update(i, { transportador: v })} />
                 </CardContent>
@@ -125,6 +155,26 @@ export default function Preview() {
         </Tabs>
       </div>
     </Layout>
+  );
+}
+
+function TipoFreteSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>Tipo de frete</Label>
+      <Select value={normalizeTipoFrete(value)} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {TIPO_FRETE_OPTIONS.map((option) => (
+            <SelectItem key={option} value={option}>
+              {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
