@@ -102,4 +102,57 @@ describe("buildNota", () => {
 
     expect(nota.tpFrete).toBe(TIPO_FRETE_DEFAULT);
   });
+
+  it("substitui as variáveis de armazém pelo cadastro encontrado", () => {
+    const res = resolveResult();
+    res.armazem = {
+      id: "arm-1",
+      razao_social: "INPASA AGROINDUSTRIAL S/A",
+      cnpj_cpf: "29316596000468",
+      inscricao_estadual: "1234567",
+      endereco: "Rod BR 163 KM 10",
+      bairro: "Zona Rural",
+      cep: "78450000",
+      municipio: "NOVA MUTUM",
+      uf: "MT",
+      telefone: null,
+      tipo: "armazem",
+      ativo: true,
+      created_at: "",
+      updated_at: "",
+    };
+    const template =
+      "Mercadoria entregue na {{armazem_nome}} CNPJ {{armazem_cnpj}} IE {{armazem_ie}} " +
+      "ENDEREÇO: {{armazem_endereco}} {{armazem_municipio}} {{armazem_uf}}";
+    const nota = buildNota(res, "5118", { ...modeloBase, dados_adicionais_template: template });
+
+    expect(nota.dadosAdicionais).toContain("INPASA AGROINDUSTRIAL S/A");
+    expect(nota.dadosAdicionais).toContain("29316596000468");
+    expect(nota.dadosAdicionais).toContain("Rod BR 163 KM 10");
+    expect(nota.dadosAdicionais).toContain("NOVA MUTUM");
+    expect(nota.dadosAdicionais).toContain("MT");
+    expect(nota.dadosAdicionais).not.toContain("{{");
+  });
+
+  it("usa dados da expedição quando não há cadastro de armazém e nunca deixa variável crua", () => {
+    const res = resolveResult();
+    res.expedicaoRow = {
+      ...row,
+      contrato: "C-2",
+      tpFaturamento: "EXPEDICAO",
+      nomeRazaoSocial: "ARMAZEM EXPEDICAO LTDA",
+      cpfCnpj: "99999999000199",
+      ie: "ISENTO",
+      endereco: "Av Central 100",
+      municipio: "SORRISO",
+      estado: "MT",
+    };
+    const template = "{{armazem_nome}} / {{armazem_municipio}} / {{armazem_uf}} / {{variavel_inexistente}}";
+    const nota = buildNota(res, "5118", { ...modeloBase, dados_adicionais_template: template });
+
+    expect(nota.dadosAdicionais).toContain("ARMAZEM EXPEDICAO LTDA");
+    expect(nota.dadosAdicionais).toContain("SORRISO");
+    expect(nota.dadosAdicionais).toContain("####");
+    expect(nota.dadosAdicionais).not.toContain("{{");
+  });
 });
