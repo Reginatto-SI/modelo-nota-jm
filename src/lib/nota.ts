@@ -70,6 +70,7 @@ function buildVars(n: Nota, r: ResolveResult): Record<string, string> {
   return {
     contrato: ph(r.searchedRow.contrato),
     contrato_vinculado: ph(r.searchedRow.contratoVinculado),
+    contrato_cliente: ph(r.searchedRow.contratoCliente),
     produtor_nome: ph(n.emitente.nome),
     produtor_cpf_cnpj: ph(n.emitente.cpfCnpj),
     produtor_ie: ph(n.emitente.ie),

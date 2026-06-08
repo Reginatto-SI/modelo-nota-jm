@@ -6,6 +6,7 @@ type Grl019ColumnKey = keyof Omit<Grl019Row, "_raw">;
 export const COLUMN_LABELS: Record<Grl019ColumnKey, string> = {
   contrato: "CONTRATO",
   contratoVinculado: "CONTRATO VINCULADO",
+  contratoCliente: "CONTRATO CLIENTE",
   empresa: "EMPRESA",
   tpFaturamento: "TP FATURAMENTO",
   codContrato: "COD.CONTRATO",
@@ -27,6 +28,7 @@ export const COLUMN_LABELS: Record<Grl019ColumnKey, string> = {
 const COLUMN_MAP: Record<Grl019ColumnKey, string[]> = {
   contrato: ["contrato"],
   contratoVinculado: ["contratovinculado"],
+  contratoCliente: ["contratocliente"],
   empresa: ["empresa"],
   tpFaturamento: ["tpfaturamento", "tipofaturamento"],
   codContrato: ["codcontrato", "codigocontrato"],
@@ -275,6 +277,7 @@ export async function parseGrl019(file: File): Promise<ParseResult> {
       .map((raw) => ({
         contrato: str(g(raw, "contrato")),
         contratoVinculado: str(g(raw, "contratoVinculado")),
+        contratoCliente: str(g(raw, "contratoCliente")),
         empresa: str(g(raw, "empresa")),
         tpFaturamento: str(g(raw, "tpFaturamento")).toUpperCase(),
         codContrato: str(g(raw, "codContrato")),

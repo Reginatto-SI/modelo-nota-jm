@@ -7,6 +7,7 @@ import type { ResolveResult } from "./resolve";
 const row: Grl019Row = {
   contrato: "C-1",
   contratoVinculado: "",
+  contratoCliente: "4700015227",
   empresa: "COOP",
   tpFaturamento: "RECEBIMENTO",
   codContrato: "108",
