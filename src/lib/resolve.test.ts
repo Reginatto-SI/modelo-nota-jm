@@ -5,6 +5,7 @@ import type { Cooperativa, Grl019Report, Grl019Row, ModeloNota, Produto, TipoCon
 const rowBase: Grl019Row = {
   contrato: "C-1",
   contratoVinculado: "C-2",
+  contratoCliente: "",
   empresa: "COAFORTE",
   tpFaturamento: "RECEBIMENTO",
   codContrato: "108",
