@@ -64,6 +64,7 @@ const modelo5118: ModeloNota = {
   nome_modelo: "Modelo 5118",
   natureza_operacao: null,
   tipo_destinatario: "cooperativa",
+  tipo_frete_padrao: null,
   dados_adicionais_template: null,
   ativo: true,
   created_at: "",

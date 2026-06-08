@@ -12,34 +12,8 @@ import { Download, AlertTriangle } from "lucide-react";
 import type { Nota } from "@/lib/nota";
 import { hasPendingPlaceholders } from "@/lib/nota";
 import { generatePdf } from "@/lib/pdf";
+import { TIPO_FRETE_OPTIONS, normalizeTipoFrete } from "@/lib/tipoFrete";
 import { toast } from "sonner";
-
-// Opções fixas de frete da NF-e, sem cadastro ou dependência de banco de dados.
-const TIPO_FRETE_OPTIONS = [
-  "0 - Por conta do Emitente",
-  "1 - Por conta do Destinatário/Remetente",
-  "2 - Por conta de Terceiros",
-  "3 - Transporte próprio por conta do Remetente",
-  "4 - Transporte próprio por conta do Destinatário",
-  "9 - Sem cobrança de frete",
-] as const;
-
-const TIPO_FRETE_DEFAULT = "1 - Por conta do Destinatário/Remetente";
-
-function normalizeTipoFrete(value?: string | null) {
-  const normalized = value?.trim().toLowerCase() ?? "";
-  if (!normalized) return TIPO_FRETE_DEFAULT;
-  const byCodeOrLabel = TIPO_FRETE_OPTIONS.find(
-    (option) => option.startsWith(normalized) || option.toLowerCase() === normalized,
-  );
-  if (byCodeOrLabel) return byCodeOrLabel;
-
-  if (["não paga frete", "nao paga frete", "sem cobranca de frete", "sem cobrança de frete"].includes(normalized)) {
-    return "9 - Sem cobrança de frete";
-  }
-
-  return TIPO_FRETE_DEFAULT;
-}
 
 export default function Preview() {
   const location = useLocation();

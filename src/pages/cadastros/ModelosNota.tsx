@@ -1,6 +1,7 @@
 import { Layout } from "@/components/Layout";
 import { CrudPage, AtivoBadge, type FieldDef, type ColumnDef } from "@/components/cadastro/CrudPage";
 import { useModelos, useSaveModelo, useDeleteModelo, useCooperativas } from "@/lib/db";
+import { TIPO_FRETE_DEFAULT, TIPO_FRETE_OPTIONS } from "@/lib/tipoFrete";
 import type { ModeloNota } from "@/lib/types";
 
 const TEMPLATE_EXEMPLO =
@@ -24,6 +25,7 @@ export default function ModelosNota() {
       { value: "5118", label: "5118" },
       { value: "5923", label: "5923" },
       { value: "5132", label: "5132" },
+      { value: "5133", label: "5133" },
     ] },
     {
       name: "tipo_destinatario",
@@ -36,17 +38,29 @@ export default function ModelosNota() {
     },
     { name: "nome_modelo", label: "Nome do Modelo", full: true },
     { name: "natureza_operacao", label: "Natureza da Operação", full: true },
+    // Campo persistido no próprio modelo para alimentar a prévia sem cadastro separado.
+    {
+      name: "tipo_frete_padrao",
+      label: "Tipo de frete padrão",
+      type: "select",
+      full: true,
+      options: TIPO_FRETE_OPTIONS.map((option) => ({ value: option, label: option })),
+      helper: "Valor inicial da prévia; o usuário ainda pode ajustar antes de gerar o PDF.",
+    },
     { name: "dados_adicionais_template", label: "Template de Dados Adicionais", type: "textarea", helper: "Use variáveis como {{produtor_nome}}, {{produto}}, {{valor_total}}, {{placa_cavalo}}..." },
     { name: "ativo", label: "Ativo", type: "switch" },
   ];
 
   const coopName = (id: string) => coops.find((c) => c.id === id)?.razao_social ?? "-";
+  // Fallback apenas visual para modelos antigos sem frete padrão persistido.
+  const fretePadraoLabel = (valor?: string | null) => valor?.trim() || TIPO_FRETE_DEFAULT;
 
   const columns: ColumnDef<ModeloNota>[] = [
     { key: "cfop", label: "CFOP" },
     { key: "nome_modelo", label: "Modelo" },
     { key: "cooperativa_id", label: "Cooperativa", render: (r) => coopName(r.cooperativa_id) },
     { key: "tipo_destinatario", label: "Destinatário" },
+    { key: "tipo_frete_padrao", label: "Frete padrão", render: (r) => fretePadraoLabel(r.tipo_frete_padrao) },
     { key: "ativo", label: "Status", render: (r) => <AtivoBadge ativo={r.ativo} /> },
   ];
 
@@ -54,12 +68,12 @@ export default function ModelosNota() {
     <Layout>
       <CrudPage
         title="Modelos de Nota"
-        description="Modelos CFOP 5118, 5923 e 5132 por cooperativa, com template de dados adicionais."
+        description="Modelos CFOP 5118, 5923, 5132 e 5133 por cooperativa, com template de dados adicionais."
         data={data}
         loading={isLoading}
         fields={fields}
         columns={columns}
-        empty={{ ativo: true, tipo_destinatario: "cooperativa", cfop: "5118", dados_adicionais_template: TEMPLATE_EXEMPLO }}
+        empty={{ ativo: true, tipo_destinatario: "cooperativa", cfop: "5118", tipo_frete_padrao: TIPO_FRETE_DEFAULT, dados_adicionais_template: TEMPLATE_EXEMPLO }}
         searchKeys={["cfop", "nome_modelo"]}
         onSave={(r) => save.mutateAsync(r)}
         onDelete={(id) => del.mutateAsync(id)}
