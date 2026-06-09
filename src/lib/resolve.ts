@@ -30,7 +30,7 @@ export interface ResolveResult {
   modelo5923?: ModeloNota;
   produto?: Produto;
   armazem?: Armazem;
-  armazemPorNome?: boolean; // matched by name, needs validation
+  armazemPorNome?: boolean; // legado: não usar razão social como chave principal
   cfop?: string;
   warnings: string[];
   errors: string[];
@@ -204,29 +204,22 @@ export function resolveContrato(
     warnings.push("Produto cadastrado sem NCM ou CST.");
   }
 
-  // armazém/destinatário — sempre que houver linha de expedição vinculada, para preencher
-  // as variáveis {{armazem_*}} dos modelos (5118, 5132, 5923). Busca por CPF/CNPJ e cai para nome.
+  // Armazém/destinatário: a chave lógica é sempre o CPF/CNPJ normalizado da linha de EXPEDIÇÃO.
+  // Não usa razão social como fallback de busca, porque o nome pode variar entre relatórios GRL019.
   let armazem: Armazem | undefined;
-  let armazemPorNome = false;
+  const armazemPorNome = false;
   if (expedicaoRow) {
     const exped = expedicaoRow;
     const cnpj = digits(exped.cpfCnpj);
     if (cnpj) {
       armazem = cad.armazens.find((a) => a.ativo && digits(a.cnpj_cpf || "") === cnpj);
     }
-    if (!armazem && exped.nomeRazaoSocial) {
-      armazem = cad.armazens.find(
-        (a) => a.ativo && a.razao_social.trim().toLowerCase() === exped.nomeRazaoSocial.trim().toLowerCase(),
-      );
-      if (armazem) {
-        armazemPorNome = true;
-        warnings.push("Armazém/destinatário localizado por NOME (não por CPF/CNPJ). Valide os dados.");
-      }
-    }
-    // Só alerta sobre cadastro ausente quando o armazém é obrigatório (operação casada 5923).
+    // O 5923 pode seguir com os dados da própria EXPEDIÇÃO quando o cadastro global ainda não existe.
     if (!armazem && ofereceCasada) {
-      warnings.push("Armazém/destinatário do contrato de expedição não está cadastrado ou ativo.");
+      warnings.push("Destinatário não encontrado no cadastro. Dados utilizados diretamente do GRL019.");
     }
+  } else if (ofereceCasada) {
+    errors.push("Não foi localizada linha de expedição vinculada para compor o destinatário do CFOP 5923.");
   }
 
   const podeGerar = Boolean(

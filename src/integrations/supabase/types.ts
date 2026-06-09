@@ -25,10 +25,12 @@ export type Database = {
           id: string
           inscricao_estadual: string | null
           municipio: string | null
+          origem_cadastro: string
           razao_social: string
           telefone: string | null
           tipo: string
           uf: string | null
+          ultima_sincronizacao_grl019: string | null
           updated_at: string
         }
         Insert: {
@@ -41,10 +43,12 @@ export type Database = {
           id?: string
           inscricao_estadual?: string | null
           municipio?: string | null
+          origem_cadastro?: string
           razao_social: string
           telefone?: string | null
           tipo?: string
           uf?: string | null
+          ultima_sincronizacao_grl019?: string | null
           updated_at?: string
         }
         Update: {
@@ -57,10 +61,12 @@ export type Database = {
           id?: string
           inscricao_estadual?: string | null
           municipio?: string | null
+          origem_cadastro?: string
           razao_social?: string
           telefone?: string | null
           tipo?: string
           uf?: string | null
+          ultima_sincronizacao_grl019?: string | null
           updated_at?: string
         }
         Relationships: []
