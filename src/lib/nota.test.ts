@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNota } from "./nota";
+import { buildNota, buildNotaPdfFileName } from "./nota";
 import { TIPO_FRETE_DEFAULT } from "./tipoFrete";
 import type { Cooperativa, Grl019Row, ModeloNota, Produto } from "./types";
 import type { ResolveResult } from "./resolve";
@@ -155,5 +155,42 @@ describe("buildNota", () => {
     expect(nota.dadosAdicionais).toContain("SORRISO");
     expect(nota.dadosAdicionais).toContain("####");
     expect(nota.dadosAdicionais).not.toContain("{{");
+  });
+
+  it("monta nome padronizado para o PDF com os dados resolvidos", () => {
+    const res = resolveResult();
+    res.searchedRow = {
+      ...row,
+      contrato: "334",
+      contratoVinculado: "340",
+      contratoCliente: "4700025684",
+      nomeRazaoSocial: "ARIEL RIGHI",
+    };
+    res.recebimentoRow = res.searchedRow;
+    const nota = buildNota(res, "5118", modeloBase);
+
+    expect(buildNotaPdfFileName(nota)).toBe(
+      "5118 - CONFIRMAÇÃO DE NEGÓCIO 334-340 CONTRATO 4700025684 - ARIEL RIGHI.pdf",
+    );
+  });
+
+  it("omite campos ausentes e sanitiza caracteres inválidos no nome do PDF", () => {
+    const res = resolveResult();
+    res.searchedRow = {
+      ...row,
+      contrato: "334/ABC",
+      contratoVinculado: "",
+      contratoCliente: "4700:025684",
+      nomeRazaoSocial: "ARIEL <RIGHI>?",
+    };
+    res.recebimentoRow = res.searchedRow;
+    const nota = buildNota(res, "5923", { ...modeloBase, cfop: "5923", nome_modelo: "Modelo 5923" });
+
+    expect(buildNotaPdfFileName(nota)).toBe(
+      "5923 - CONFIRMAÇÃO DE NEGÓCIO 334-ABC CONTRATO 4700-025684 - ARIEL -RIGHI.pdf",
+    );
+    expect(buildNotaPdfFileName(nota)).not.toMatch(/[\/\\:*?"<>|]/);
+    expect(buildNotaPdfFileName(nota)).not.toContain("undefined");
+    expect(buildNotaPdfFileName(nota)).not.toContain("null");
   });
 });
