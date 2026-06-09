@@ -57,21 +57,30 @@ function setBaseStyle(doc: jsPDF) {
 }
 
 function drawFooter(doc: jsPDF, ctx: DrawContext) {
-  const y = ctx.pageHeight - 24;
+  // Faixa de aviso compacta: título em uma linha + texto quebrado dentro da própria caixa,
+  // com altura suficiente para não cortar a 2ª linha nem invadir o crédito do rodapé.
+  const lineH = 3.2;
+  const padding = 2;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.6);
+  const textLines = doc.splitTextToSize(ORIENTATIVE_TEXT, ctx.contentWidth - padding * 2);
+  const bandH = padding + 3 + textLines.length * lineH + 1.2;
+  const y = ctx.pageHeight - 11 - bandH;
+
   doc.setDrawColor(205, 190, 150);
   doc.setFillColor(...WARN);
-  doc.rect(ctx.margin, y + 2, ctx.contentWidth, 9, "FD");
+  doc.rect(ctx.margin, y, ctx.contentWidth, bandH, "FD");
   doc.setTextColor(100, 75, 35);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.3);
-  doc.text(ORIENTATIVE_TITLE, ctx.margin + 2, y + 5.4);
+  doc.setFontSize(7.0);
+  doc.text(ORIENTATIVE_TITLE, ctx.margin + padding, y + 3.4);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.8);
-  doc.text(doc.splitTextToSize(ORIENTATIVE_TEXT, ctx.contentWidth - 58), ctx.margin + 2, y + 8.8);
+  doc.setFontSize(6.6);
+  doc.text(textLines, ctx.margin + padding, y + 3.4 + lineH + 0.6);
 
   doc.setTextColor(95, 105, 120);
   doc.setFontSize(7);
-  doc.text(`${FOOTER_TEXT} | ${ORIENTATIVE_TITLE}`, ctx.pageWidth / 2, ctx.pageHeight - 7.5, {
+  doc.text(`${FOOTER_TEXT} | ${ORIENTATIVE_TITLE}`, ctx.pageWidth / 2, ctx.pageHeight - 5.5, {
     align: "center",
   });
   setBaseStyle(doc);
@@ -447,14 +456,25 @@ function drawTransportBlock(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number)
 
 function drawAdditionalData(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   y = ensureSpace(doc, ctx, y, 36);
-  const leftW = ctx.contentWidth * 0.68;
+  // Mais espaço útil para os textos parametrizados: Dados Adicionais largo (82%) e
+  // "Reservado ao Fisco" estreito (18%), aproximando do modelo legado.
+  const leftW = ctx.contentWidth * 0.82;
   const rightW = ctx.contentWidth - leftW;
   const titleH = 4.4;
   const minBodyH = 29;
+  // Padding interno explícito (esquerda/direita) para o texto nunca encostar nas bordas da caixa.
+  const padX = 2.4;
+  const padY = 4.0;
+  const fontSize = 7.0;
+  // Espaçamento de linha fixo e coerente com o tamanho da fonte, evitando sobreposição e corte.
+  const lineStep = 3.3;
+  const textWidth = leftW - padX * 2;
   const text = valueOrDash(
     nota.observacao ? `${nota.dadosAdicionais || "-"}\n\nObservação: ${nota.observacao}` : nota.dadosAdicionais,
   );
-  const lines = doc.splitTextToSize(text, leftW - 4);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(fontSize);
+  const lines = doc.splitTextToSize(text, textWidth);
   let index = 0;
   let currentY = y;
 
@@ -462,9 +482,10 @@ function drawAdditionalData(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number)
   while (index < lines.length || index === 0) {
     currentY = ensureSpace(doc, ctx, currentY, titleH + minBodyH);
     const availableBodyH = ctx.footerTop - currentY - titleH;
-    const maxLines = Math.max(1, Math.floor((availableBodyH - 4) / 3.45));
+    // Quantas linhas cabem nesta página, respeitando padding superior e inferior.
+    const maxLines = Math.max(1, Math.floor((availableBodyH - padY * 2) / lineStep));
     const pageLines = lines.slice(index, index + maxLines);
-    const bodyH = Math.max(minBodyH, pageLines.length * 3.45 + 4);
+    const bodyH = Math.max(minBodyH, pageLines.length * lineStep + padY * 2);
 
     drawSectionTitle(doc, ctx, "DADOS ADICIONAIS / INFORMAÇÕES COMPLEMENTARES", ctx.margin, currentY, leftW);
     drawSectionTitle(doc, ctx, "RESERVADO AO FISCO", ctx.margin + leftW, currentY, rightW);
@@ -473,8 +494,13 @@ function drawAdditionalData(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number)
     doc.rect(ctx.margin + leftW, currentY + titleH, rightW, bodyH);
     doc.setTextColor(...RED);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.0);
-    doc.text(pageLines, ctx.margin + 2, currentY + titleH + 4.2);
+    doc.setFontSize(fontSize);
+    // Desenho linha a linha com passo fixo: garante respeito às margens e nenhuma linha cortada.
+    let lineY = currentY + titleH + padY;
+    for (const ln of pageLines) {
+      doc.text(ln, ctx.margin + padX, lineY);
+      lineY += lineStep;
+    }
     setBaseStyle(doc);
 
     index += pageLines.length;

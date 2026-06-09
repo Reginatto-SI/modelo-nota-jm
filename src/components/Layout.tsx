@@ -16,7 +16,8 @@ import { cn } from "@/lib/utils";
 const nav = [
   { to: "/", label: "Início", icon: Home, end: true },
   { to: "/importar", label: "Importar GRL019", icon: Upload },
-  { to: "/pesquisa", label: "Pesquisar Contratos", icon: Search },
+  // Renomeado: a tela localiza um contrato e gera o modelo de nota (não é só pesquisa).
+  { to: "/pesquisa", label: "Gerar Modelo de Nota", icon: Search },
 ];
 
 const cadastros = [
@@ -54,9 +55,9 @@ export function Layout({ children }: { children: ReactNode }) {
       <aside className="hidden w-64 shrink-0 flex-col bg-sidebar p-4 md:flex">
         <button onClick={() => navigate("/")} className="mb-6 flex items-center gap-3 text-left">
           <Logo size={40} />
-          <div className="leading-tight">
-            <div className="text-sm font-bold text-sidebar-primary-foreground">Modelo de Nota</div>
-            <div className="text-lg font-extrabold tracking-tight text-sidebar-accent-foreground">JM</div>
+          {/* Nome do sistema em uma única linha — remove a redundância visual do "JM" duplicado. */}
+          <div className="text-base font-extrabold leading-tight tracking-tight text-sidebar-primary-foreground">
+            Modelo de Nota JM
           </div>
         </button>
 

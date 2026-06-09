@@ -110,9 +110,10 @@ export default function Pesquisa() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Pesquisar Contratos</h1>
+          {/* Título alinhado à finalidade real da tela: localizar contrato e gerar o modelo. */}
+          <h1 className="text-2xl font-bold">Gerar Modelo de Nota</h1>
           <p className="text-sm text-muted-foreground">
-            Pesquise por contrato, produtor, CPF/CNPJ, produto, cooperativa ou tipo de contrato.
+            Localize o contrato (por número, produtor, CPF/CNPJ, produto ou cooperativa) e gere o modelo de nota.
           </p>
         </div>
 
@@ -158,9 +159,10 @@ export default function Pesquisa() {
                       ) : res.expedicaoVinculadaRecebimento ? (
                         <Badge variant="secondary">Ver recebimento</Badge>
                       ) : res.ofereceCasada ? (
-                        <Badge>CFOP 5118 + 5923</Badge>
+                        // Sem "CFOP" no badge para não sugerir dependência/obrigatoriedade confusa.
+                        <Badge>5118 + 5923</Badge>
                       ) : res.cfop ? (
-                        <Badge>CFOP {res.cfop}</Badge>
+                        <Badge>{res.cfop}</Badge>
                       ) : (
                         <Badge variant="secondary">Sem param.</Badge>
                       )}
@@ -172,7 +174,7 @@ export default function Pesquisa() {
                         </Button>
                       ) : (
                         <Button size="sm" variant={res.podeGerar ? "default" : "outline"} onClick={() => onGerar(r)}>
-                          <FileText className="mr-1 h-4 w-4" /> Gerar
+                          <FileText className="mr-1 h-4 w-4" /> Gerar Modelo
                         </Button>
                       )}
                     </TableCell>
@@ -187,9 +189,10 @@ export default function Pesquisa() {
       <AlertDialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Operação casada (CFOP 5118)</AlertDialogTitle>
+            <AlertDialogTitle>Operação casada (5118 + 5923)</AlertDialogTitle>
             <AlertDialogDescription>
-              Deseja gerar apenas o modelo 5118 ou gerar os modelos 5118 e 5923?
+              Neste contrato o modelo 5923 (remessa) sempre acompanha a venda 5118 — por isso não há opção de gerar o
+              5923 sozinho. Você pode gerar apenas o 5118 ou os dois modelos juntos (5118 + 5923).
               {dialog && !dialog.modelo5923 && (
                 <span className="mt-2 flex items-center gap-1 text-warning">
                   <AlertTriangle className="h-4 w-4" /> Modelo 5923 não cadastrado ou inativo para esta cooperativa.
