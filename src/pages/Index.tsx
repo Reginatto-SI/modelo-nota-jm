@@ -63,7 +63,7 @@ export default function Index() {
         </div>
 
         <Card className="shadow-card">
-          <CardHeader><CardTitle className="text-base">Pesquisa rápida por contrato</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Localizar contrato e gerar modelo</CardTitle></CardHeader>
           <CardContent>
             <form
               className="flex gap-2"
@@ -73,7 +73,7 @@ export default function Index() {
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Número do contrato..." className="pl-9" />
               </div>
-              <Button type="submit" disabled={!report}>Pesquisar</Button>
+              <Button type="submit" disabled={!report}>Gerar Modelo</Button>
             </form>
           </CardContent>
         </Card>
