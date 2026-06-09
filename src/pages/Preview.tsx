@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, AlertTriangle } from "lucide-react";
 import type { Nota } from "@/lib/nota";
-import { hasPendingPlaceholders } from "@/lib/nota";
+import { buildNotaPdfFileName, hasPendingPlaceholders } from "@/lib/nota";
 import { generatePdf } from "@/lib/pdf";
 import { TIPO_FRETE_OPTIONS, normalizeTipoFrete } from "@/lib/tipoFrete";
 import { toast } from "sonner";
@@ -40,8 +40,9 @@ export default function Preview() {
     if (notas.some((n) => n.quantidade <= 0 || n.valorUnitario <= 0 || n.valorTotal <= 0)) {
       return toast.error("Quantidade e valores devem ser maiores que zero.");
     }
-    generatePdf(notas, `modelo-nota-jm-${notas.map((n) => n.cfop).join("-")}.pdf`);
-    toast.success("PDF gerado.");
+    // Cada aba/modelo vira um PDF próprio; não une CFOPs diferentes no mesmo arquivo.
+    notas.forEach((nota) => generatePdf([nota], buildNotaPdfFileName(nota)));
+    toast.success(notas.length > 1 ? "PDFs gerados separadamente." : "PDF gerado.");
   };
 
   return (

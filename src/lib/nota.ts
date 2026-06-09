@@ -15,6 +15,13 @@ export interface NotaParty {
   cep: string;
 }
 
+export interface NotaPdfFileNameMeta {
+  contrato: string;
+  contratoVinculado: string;
+  contratoCliente: string;
+  produtorNome: string;
+}
+
 export interface Nota {
   cfop: string;
   nomeModelo: string;
@@ -33,10 +40,47 @@ export interface Nota {
   transportador: string;
   dadosAdicionais: string;
   observacao: string;
+  pdfFileNameMeta?: NotaPdfFileNameMeta;
 }
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function cleanFileNameField(value: unknown) {
+  return String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[\/\\:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[ .-]+|[ .-]+$/g, "");
+}
+
+function sanitizePdfFileName(value: string) {
+  const sanitized = value
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[\/\\:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[ .-]+|[ .-]+$/g, "");
+
+  return `${sanitized || "modelo-nota-jm"}.pdf`;
+}
+
+export function buildNotaPdfFileName(nota: Nota) {
+  const cfop = cleanFileNameField(nota.cfop);
+  const meta = nota.pdfFileNameMeta;
+  const contrato = cleanFileNameField(meta?.contrato);
+  const contratoVinculado = cleanFileNameField(meta?.contratoVinculado);
+  const contratoCliente = cleanFileNameField(meta?.contratoCliente);
+  const produtorNome = cleanFileNameField(meta?.produtorNome || nota.emitente.nome);
+  const contratos = [contrato, contratoVinculado].filter(Boolean).join("-");
+  const segments = [cfop, "CONFIRMAÇÃO DE NEGÓCIO", contratos].filter(Boolean);
+
+  if (contratoCliente) segments.push("CONTRATO", contratoCliente);
+
+  const baseName = `${segments.join(" ")}${produtorNome ? ` - ${produtorNome}` : ""}`;
+  return sanitizePdfFileName(baseName);
 }
 
 const EMPTY_PARTY: NotaParty = {
@@ -190,6 +234,13 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
     transportador: "",
     dadosAdicionais: "",
     observacao: rec.observacao,
+    // Metadados vindos da mesma resolução usada no modelo/prévia para nomear o PDF sem criar fonte paralela.
+    pdfFileNameMeta: {
+      contrato: r.searchedRow.contrato,
+      contratoVinculado: r.searchedRow.contratoVinculado,
+      contratoCliente: r.searchedRow.contratoCliente,
+      produtorNome: emitente.nome,
+    },
   };
 
   nota.dadosAdicionais = renderTemplate(modelo.dados_adicionais_template ?? "", buildVars(nota, r));
