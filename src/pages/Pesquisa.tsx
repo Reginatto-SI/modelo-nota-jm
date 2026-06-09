@@ -22,6 +22,35 @@ import { buildNota, type CfopModelo, type Nota } from "@/lib/nota";
 import type { Grl019Row } from "@/lib/types";
 import { toast } from "sonner";
 
+function normalize(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function digits(value: unknown) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+// Busca principal operacional: mantém a pesquisa focada nos campos usados para localizar o contrato.
+function smartSearchMatches(row: Grl019Row, term: string) {
+  if (!term.trim()) return true;
+  const normalizedTerm = normalize(term);
+  const digitTerm = digits(term);
+  const searchable = [
+    row.contrato,
+    row.contratoVinculado,
+    row.nomeRazaoSocial,
+    row.cpfCnpj,
+    row.descItem,
+  ];
+
+  return searchable.some((value) => normalize(value).includes(normalizedTerm)) ||
+    Boolean(digitTerm && digits(row.cpfCnpj).includes(digitTerm));
+}
+
 export default function Pesquisa() {
   const navigate = useNavigate();
   const { report } = useReport();
@@ -33,17 +62,23 @@ export default function Pesquisa() {
   const { data: produtos = [] } = useProdutos();
   const { data: modelos = [] } = useModelos();
   const { data: tipos = [] } = useTiposContrato();
-  const cad: CadastrosBundle = { cooperativas, armazens, produtos, modelos, tipos };
+  const cad: CadastrosBundle = useMemo(
+    () => ({ cooperativas, armazens, produtos, modelos, tipos }),
+    [cooperativas, armazens, produtos, modelos, tipos],
+  );
 
-  const rows = useMemo(() => {
+  const visibleRows = useMemo(() => {
     if (!report) return [];
-    if (!q.trim()) return report.rows.slice(0, 50);
-    const t = q.toLowerCase();
-    return report.rows.filter((r) =>
-      [r.contrato, r.contratoVinculado, r.nomeRazaoSocial, r.cpfCnpj, r.descItem, r.empresa, r.tpFaturamento, r.codContrato, r.descContrato]
-        .some((v) => String(v).toLowerCase().includes(t)),
-    );
+    return report.rows
+      .filter((row) => smartSearchMatches(row, q))
+      .slice(0, 50);
   }, [report, q]);
+
+  const resolvedRows = useMemo(() => {
+    if (!report) return [];
+    // Resolve apenas os registros que serão renderizados para evitar cálculos repetidos na filtragem e no JSX.
+    return visibleRows.map((row) => ({ row, res: resolveContrato(report, row, cad) }));
+  }, [cad, report, visibleRows]);
 
   if (!report) {
     return (
@@ -66,8 +101,7 @@ export default function Pesquisa() {
     if (contrato) setQ(contrato);
   };
 
-  const onGerar = (row: Grl019Row) => {
-    const res = resolveContrato(report, row, cad);
+  const onGerar = (res: ResolveResult) => {
     // EXPEDIÇÃO vinculada não gera nota diretamente; ela só alimenta o destinatário do 5923.
     if (res.expedicaoVinculadaRecebimento) {
       orientarRecebimento(res);
@@ -113,74 +147,57 @@ export default function Pesquisa() {
           {/* Título alinhado à finalidade real da tela: localizar contrato e gerar o modelo. */}
           <h1 className="text-2xl font-bold">Gerar Modelo de Nota</h1>
           <p className="text-sm text-muted-foreground">
-            Localize o contrato (por número, produtor, CPF/CNPJ, produto ou cooperativa) e gere o modelo de nota.
+            Localize o contrato por número, produtor, CPF/CNPJ ou produto e gere o modelo de nota.
           </p>
         </div>
 
-        <div className="relative max-w-md">
+        <div className="relative max-w-2xl">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar contrato..." className="pl-9" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Pesquisar contrato, agricultor ou CPF/CNPJ..."
+            className="pl-9"
+          />
         </div>
 
-        <div className="rounded-lg border bg-card shadow-card">
+        <div className="overflow-x-auto rounded-lg border bg-card shadow-card">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Contrato</TableHead>
-                <TableHead>Vínculo</TableHead>
-                <TableHead>TP Fat.</TableHead>
-                <TableHead>Nome / Razão Social</TableHead>
+                <TableHead>Agricultor / Razão Social</TableHead>
                 <TableHead>Produto</TableHead>
-                <TableHead>Preço Saca</TableHead>
                 <TableHead>Modelo</TableHead>
                 <TableHead className="text-right">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 ? (
+              {resolvedRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">Nenhum contrato encontrado.</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">Nenhum contrato encontrado.</TableCell>
                 </TableRow>
-              ) : rows.map((r, i) => {
-                const res = resolveContrato(report, r, cad);
-                return (
-                  <TableRow key={r.contrato + i}>
-                    <TableCell className="font-semibold">{r.contrato}</TableCell>
-                    <TableCell>{r.contratoVinculado || "—"}</TableCell>
-                    <TableCell>{r.tpFaturamento}</TableCell>
-                    <TableCell className="max-w-[180px] truncate">{r.nomeRazaoSocial}</TableCell>
-                    <TableCell className="max-w-[160px] truncate">{r.descItem}</TableCell>
-                    <TableCell>{r.precoUnitIcms.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</TableCell>
-                    <TableCell>
-                      {res.errors.length > 0 ? (
-                        <Badge variant="destructive">Erro param.</Badge>
-                      ) : res.expedicaoComoVinculo5923 ? (
-                        <Badge variant="secondary">Vínculo do 5923</Badge>
-                      ) : res.expedicaoVinculadaRecebimento ? (
-                        <Badge variant="secondary">Ver recebimento</Badge>
-                      ) : res.ofereceCasada ? (
-                        // Sem "CFOP" no badge para não sugerir dependência/obrigatoriedade confusa.
-                        <Badge>5118 + 5923</Badge>
-                      ) : res.cfop ? (
-                        <Badge>{res.cfop}</Badge>
-                      ) : (
-                        <Badge variant="secondary">Sem param.</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {res.expedicaoVinculadaRecebimento ? (
-                        <Button size="sm" variant="outline" onClick={() => orientarRecebimento(res)}>
-                          Ver recebimento
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant={res.podeGerar ? "default" : "outline"} onClick={() => onGerar(r)}>
-                          <FileText className="mr-1 h-4 w-4" /> Gerar Modelo
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              ) : resolvedRows.map(({ row: r, res }, i) => (
+                <TableRow key={r.contrato + i}>
+                  <TableCell className="font-semibold">{r.contrato}</TableCell>
+                  <TableCell className="max-w-[260px] truncate">{r.nomeRazaoSocial}</TableCell>
+                  <TableCell className="max-w-[180px] truncate">{r.descItem}</TableCell>
+                  <TableCell>
+                    <ModeloBadge res={res} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {res.expedicaoVinculadaRecebimento ? (
+                      <Button size="sm" variant="outline" onClick={() => orientarRecebimento(res)}>
+                        Ver recebimento
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant={res.podeGerar ? "default" : "outline"} onClick={() => onGerar(res)}>
+                        <FileText className="mr-1 h-4 w-4" /> Gerar Modelo
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </div>
@@ -211,6 +228,15 @@ export default function Pesquisa() {
       </AlertDialog>
     </Layout>
   );
+}
+
+function ModeloBadge({ res }: { res: ResolveResult }) {
+  if (res.errors.length > 0) return <Badge variant="destructive">Erro param.</Badge>;
+  if (res.expedicaoComoVinculo5923) return <Badge variant="secondary">Vínculo do 5923</Badge>;
+  if (res.expedicaoVinculadaRecebimento) return <Badge variant="secondary">Ver recebimento</Badge>;
+  if (res.ofereceCasada) return <Badge>5118 + 5923</Badge>;
+  if (res.cfop) return <Badge>{res.cfop}</Badge>;
+  return <Badge variant="secondary">Sem param.</Badge>;
 }
 
 function EmptyState({ onGo }: { onGo: () => void }) {
