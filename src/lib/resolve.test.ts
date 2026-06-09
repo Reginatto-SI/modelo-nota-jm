@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveContrato, type CadastrosBundle } from "./resolve";
-import type { Cooperativa, Grl019Report, Grl019Row, ModeloNota, Produto, TipoContrato } from "./types";
+import type { Armazem, Cooperativa, Grl019Report, Grl019Row, ModeloNota, Produto, TipoContrato } from "./types";
 
 const rowBase: Grl019Row = {
   contrato: "C-1",
@@ -78,6 +78,26 @@ const modelo5923: ModeloNota = {
   cfop: "5923",
   nome_modelo: "Modelo 5923",
   tipo_destinatario: "armazem_destinatario",
+};
+
+
+const armazemCadastrado: Armazem = {
+  id: "armazem-1",
+  razao_social: "Nome cadastrado",
+  cnpj_cpf: "222",
+  inscricao_estadual: "IE-222",
+  endereco: "Rua Expedição",
+  bairro: null,
+  cep: null,
+  municipio: "Cidade Expedição",
+  uf: "MT",
+  telefone: null,
+  tipo: "armazem",
+  origem_cadastro: "manual",
+  ultima_sincronizacao_grl019: null,
+  ativo: true,
+  created_at: "",
+  updated_at: "",
 };
 
 const produto: Produto = {
@@ -176,6 +196,27 @@ describe("resolveContrato", () => {
     expect(res.parametrizacaoSuspeitaExpedicao5923).toBe(true);
     expect(res.podeGerar).toBe(false);
     expect(res.cfop).toBe("5118");
+  });
+
+  it("localiza destinatário do 5923 pelo CPF/CNPJ normalizado da expedição", () => {
+    const res = resolveContrato(report, rowBase, cadastros({
+      armazens: [{ ...armazemCadastrado, cnpj_cpf: "000.000.000-222" }],
+      tipos: [tipoContrato({ gera_operacao_casada: true })],
+    }));
+
+    expect(res.armazem?.id).toBe("armazem-1");
+    expect(res.warnings).not.toContain("Destinatário não encontrado no cadastro. Dados utilizados diretamente do GRL019.");
+  });
+
+  it("não usa razão social como chave do destinatário e permite fallback para GRL019", () => {
+    const res = resolveContrato(report, rowBase, cadastros({
+      armazens: [{ ...armazemCadastrado, cnpj_cpf: "999", razao_social: "Armazém" }],
+      tipos: [tipoContrato({ gera_operacao_casada: true })],
+    }));
+
+    expect(res.armazem).toBeUndefined();
+    expect(res.armazemPorNome).toBe(false);
+    expect(res.warnings).toContain("Destinatário não encontrado no cadastro. Dados utilizados diretamente do GRL019.");
   });
 
   it("bloqueia geração direta de EXPEDIÇÃO parametrizada como CFOP 5923 sem recebimento vinculado", () => {

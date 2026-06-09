@@ -30,6 +30,8 @@ export interface Armazem {
   uf: string | null;
   telefone: string | null;
   tipo: string;
+  origem_cadastro: "manual" | "grl019" | string | null;
+  ultima_sincronizacao_grl019: string | null;
   ativo: boolean;
   created_at: string;
   updated_at: string;

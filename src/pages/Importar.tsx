@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,7 @@ import {
 import { Upload, FileSpreadsheet, RefreshCw, Trash2, CheckCircle2, AlertTriangle, Copy } from "lucide-react";
 import { useReport } from "@/context/ReportContext";
 import { parseGrl019, summarize, type ImportDiagnostics } from "@/lib/grl019";
-import { useCooperativas } from "@/lib/db";
+import { syncArmazensFromGrl019, useCooperativas, type SyncArmazensFromGrl019Result } from "@/lib/db";
 import type { Grl019Report } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -32,20 +33,43 @@ type PendingImport = {
   missingRecommendedColumns: string[];
 };
 
+type LastSyncResult = SyncArmazensFromGrl019Result & {
+  fileName: string;
+};
+
 export default function Importar() {
   const { report, setReport, removeReport } = useReport();
+  const queryClient = useQueryClient();
   const { data: coops = [] } = useCooperativas();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [diagnostics, setDiagnostics] = useState<ImportDiagnostics | null>(null);
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
+  const [lastSync, setLastSync] = useState<LastSyncResult | null>(null);
 
   const saveParsedReport = async (nextReport: Grl019Report, missingRecommendedColumns: string[]) => {
     await setReport(nextReport);
+
+    let syncMessage = "";
+    try {
+      // Cria/atualiza apenas o cadastro global resumido dos destinatários de EXPEDIÇÃO; o GRL019 completo continua no navegador.
+      const sync = await syncArmazensFromGrl019(nextReport);
+      setLastSync({ ...sync, fileName: nextReport.fileName });
+      await queryClient.invalidateQueries({ queryKey: ["armazens"] });
+      const touched = sync.criados + sync.atualizados;
+      syncMessage = touched
+        ? ` Pré-cadastro: ${sync.criados} criado(s), ${sync.atualizados} atualizado(s).`
+        : " Nenhum novo destinatário para pré-cadastrar.";
+    } catch (error) {
+      setLastSync(null);
+      const message = error instanceof Error ? error.message : "erro desconhecido";
+      toast.error(`Relatório importado, mas o pré-cadastro de destinatários falhou: ${message}`);
+    }
+
     const warning = missingRecommendedColumns.length
       ? ` Atenção: colunas recomendadas ausentes: ${missingRecommendedColumns.join(", ")}.`
       : "";
-    toast.success(`Relatório importado: ${nextReport.rows.length} linhas.${warning}`);
+    toast.success(`Relatório importado: ${nextReport.rows.length} linhas.${warning}${syncMessage}`);
   };
 
   const handleFile = async (file: File) => {
@@ -114,13 +138,36 @@ export default function Importar() {
                 {busy ? "Lendo..." : report ? "Substituir relatório" : "Importar arquivo"}
               </Button>
               {report && (
-                <Button variant="outline" onClick={() => removeReport()}>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    await removeReport();
+                    setLastSync(null);
+                  }}
+                >
                   <Trash2 className="mr-1 h-4 w-4" /> Limpar
                 </Button>
               )}
             </div>
           </CardContent>
         </Card>
+
+        {lastSync && (
+          <Card className="border-primary/20 shadow-card">
+            <CardHeader>
+              <CardTitle className="text-base">Resultado do pré-cadastro de destinatários</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+              <Info label="Arquivo" value={lastSync.fileName} />
+              <Info label="Destinatários encontrados" value={String(lastSync.encontrados)} ok={lastSync.encontrados > 0} />
+              <Info label="Criados" value={String(lastSync.criados)} ok={lastSync.criados > 0} />
+              <Info label="Atualizados" value={String(lastSync.atualizados)} ok={lastSync.atualizados > 0} />
+              <Info label="Protegidos" value={String(lastSync.protegidos)} warn={lastSync.protegidos > 0} />
+              <Info label="Inalterados" value={String(lastSync.inalterados)} />
+              <Info label="Ignorados" value={String(lastSync.ignorados)} warn={lastSync.ignorados > 0} />
+            </CardContent>
+          </Card>
+        )}
 
         {report && summary && (
           <Card className="shadow-card">
