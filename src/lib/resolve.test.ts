@@ -156,6 +156,27 @@ describe("resolveContrato", () => {
     expect(res.modelo?.cfop).toBe("5118");
   });
 
+  it("usa modelo liberado para a cooperativa via N:N (cooperativa_ids)", () => {
+    const res = resolveContrato(report, rowBase, cadastros({
+      modelos: [{ ...modelo5118, cooperativa_id: null, cooperativa_ids: [cooperativa.id] }, modelo5923],
+    }));
+
+    expect(res.errors).toEqual([]);
+    expect(res.modelo?.id).toBe("modelo-5118");
+  });
+
+  it("bloqueia geração quando o modelo não está liberado para a cooperativa", () => {
+    const res = resolveContrato(report, rowBase, cadastros({
+      // Modelo existe e ativo, mas liberado apenas para outra cooperativa.
+      modelos: [{ ...modelo5118, cooperativa_id: null, cooperativa_ids: ["outra-coop"] }, modelo5923],
+    }));
+
+    expect(res.podeGerar).toBe(false);
+    expect(res.modelo).toBeUndefined();
+    expect(res.errors.some((e) => e.includes("não está liberado para a cooperativa"))).toBe(true);
+  });
+
+
   it("aceita CST ICMS do modelo quando o produto não tem CST cadastrada", () => {
     const res = resolveContrato(report, rowBase, cadastros({
       modelos: [{ ...modelo5118, cst_icms_padrao: "090" }, modelo5923],

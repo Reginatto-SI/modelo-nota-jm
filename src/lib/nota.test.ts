@@ -134,6 +134,8 @@ describe("buildNota", () => {
       uf: "MT",
       telefone: null,
       tipo: "armazem",
+      origem_cadastro: "manual",
+      ultima_sincronizacao_grl019: null,
       ativo: true,
       created_at: "",
       updated_at: "",

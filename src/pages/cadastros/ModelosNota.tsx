@@ -1,5 +1,48 @@
+import { useMemo, useState } from "react";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { Layout } from "@/components/Layout";
-import { CrudPage, AtivoBadge, type FieldDef, type ColumnDef } from "@/components/cadastro/CrudPage";
+import { AtivoBadge } from "@/components/cadastro/CrudPage";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useModelos, useSaveModelo, useDeleteModelo, useCooperativas } from "@/lib/db";
 import { TIPO_FRETE_DEFAULT, TIPO_FRETE_OPTIONS } from "@/lib/tipoFrete";
 import type { ModeloNota } from "@/lib/types";
@@ -7,84 +50,395 @@ import type { ModeloNota } from "@/lib/types";
 const TEMPLATE_EXEMPLO =
   "Contrato: {{contrato}} / Vinculado: {{contrato_vinculado}} / Cliente: {{contrato_cliente}}\nProdutor: {{produtor_nome}} - CPF/CNPJ: {{produtor_cpf_cnpj}}\nProduto: {{produto}} - NCM: {{ncm}}\nQtd: {{quantidade}} KG x R$ {{valor_unitario}} = R$ {{valor_total}}\nPLACA CAVALO: {{placa_cavalo}}\nCND PRODUTOR NUM: {{cnd_produtor_numero}} COD.AUT: {{cnd_produtor_codigo_autenticacao}} VENC: {{cnd_produtor_vencimento}}";
 
+// Variáveis disponíveis para o template de Dados Adicionais.
+const VARIAVEIS_DISPONIVEIS: { grupo: string; itens: string[] }[] = [
+  { grupo: "Contrato", itens: ["{{contrato}}", "{{contrato_vinculado}}", "{{contrato_cliente}}"] },
+  { grupo: "Produtor", itens: ["{{produtor_nome}}", "{{produtor_cpf_cnpj}}"] },
+  {
+    grupo: "Armazém / Destinatário",
+    itens: [
+      "{{armazem_nome}}",
+      "{{armazem_cnpj}}",
+      "{{armazem_ie}}",
+      "{{armazem_endereco}}",
+      "{{armazem_municipio}}",
+      "{{armazem_uf}}",
+    ],
+  },
+  { grupo: "Produto", itens: ["{{produto}}", "{{ncm}}", "{{quantidade}}", "{{valor_unitario}}", "{{valor_total}}"] },
+  { grupo: "Transporte", itens: ["{{placa_cavalo}}"] },
+  {
+    grupo: "CND Produtor",
+    itens: ["{{cnd_produtor_numero}}", "{{cnd_produtor_codigo_autenticacao}}", "{{cnd_produtor_vencimento}}"],
+  },
+];
+
+type ModeloForm = Partial<ModeloNota> & { cooperativa_ids?: string[] };
+
+const EMPTY: ModeloForm = {
+  ativo: true,
+  tipo_destinatario: "cooperativa",
+  cfop: "5118",
+  tipo_frete_padrao: TIPO_FRETE_DEFAULT,
+  cst_icms_padrao: "",
+  dados_adicionais_template: TEMPLATE_EXEMPLO,
+  cooperativa_ids: [],
+};
+
 export default function ModelosNota() {
   const { data: coops = [] } = useCooperativas();
   const { data = [], isLoading } = useModelos();
   const save = useSaveModelo();
   const del = useDeleteModelo();
 
-  const fields: FieldDef[] = [
-    {
-      name: "cooperativa_id",
-      label: "Cooperativa",
-      type: "select",
-      full: true,
-      options: coops.map((c) => ({ value: c.id, label: c.razao_social })),
-    },
-    { name: "cfop", label: "CFOP", type: "select", options: [
-      { value: "5118", label: "5118" },
-      { value: "5923", label: "5923" },
-      { value: "5132", label: "5132" },
-      { value: "5133", label: "5133" },
-    ] },
-    {
-      name: "tipo_destinatario",
-      label: "Tipo de Destinatário",
-      type: "select",
-      options: [
-        { value: "cooperativa", label: "Cooperativa" },
-        { value: "armazem_destinatario", label: "Armazém / Destinatário" },
-      ],
-    },
-    { name: "nome_modelo", label: "Nome do Modelo", full: true },
-    { name: "natureza_operacao", label: "Natureza da Operação", full: true },
-    // Campo persistido no próprio modelo para alimentar a prévia sem cadastro separado.
-    {
-      name: "tipo_frete_padrao",
-      label: "Tipo de frete padrão",
-      type: "select",
-      full: true,
-      options: TIPO_FRETE_OPTIONS.map((option) => ({ value: option, label: option })),
-      helper: "Valor inicial da prévia; o usuário ainda pode ajustar antes de gerar o PDF.",
-    },
-    // CST opcional por Modelo de Nota/CFOP; o PDF cai para a CST do produto quando ficar vazia.
-    {
-      name: "cst_icms_padrao",
-      label: "CST ICMS padrão",
-      helper: "Quando preenchida, esta CST será usada no PDF deste modelo. Se vazio, o sistema usa a CST do produto.",
-    },
-    { name: "dados_adicionais_template", label: "Template de Dados Adicionais", type: "textarea", helper: "Use variáveis como {{produtor_nome}}, {{produto}}, {{valor_total}}, {{placa_cavalo}}..." },
-    { name: "ativo", label: "Ativo", type: "switch" },
-  ];
+  const coopsAtivas = useMemo(() => coops.filter((c) => c.ativo), [coops]);
+
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState("dados");
+  const [form, setForm] = useState<ModeloForm>(EMPTY);
+  const [q, setQ] = useState("");
+  const [delId, setDelId] = useState<string | null>(null);
+
+  const set = (name: keyof ModeloForm, value: unknown) => setForm((f) => ({ ...f, [name]: value }));
+
+  const filtered = useMemo(() => {
+    if (!q.trim()) return data;
+    const t = q.toLowerCase();
+    return data.filter(
+      (r) =>
+        r.cfop.toLowerCase().includes(t) || (r.nome_modelo ?? "").toLowerCase().includes(t),
+    );
+  }, [data, q]);
+
+  const openNew = () => {
+    setForm({ ...EMPTY });
+    setTab("dados");
+    setOpen(true);
+  };
+  const openEdit = (row: ModeloNota) => {
+    setForm({ ...row, cooperativa_ids: row.cooperativa_ids ?? [] });
+    setTab("dados");
+    setOpen(true);
+  };
 
   const coopName = (id: string) => coops.find((c) => c.id === id)?.razao_social ?? "-";
-  // Fallback apenas visual para modelos antigos sem frete padrão persistido.
-  const fretePadraoLabel = (valor?: string | null) => valor?.trim() || TIPO_FRETE_DEFAULT;
 
-  const columns: ColumnDef<ModeloNota>[] = [
-    { key: "cfop", label: "CFOP" },
-    { key: "nome_modelo", label: "Modelo" },
-    { key: "cooperativa_id", label: "Cooperativa", render: (r) => coopName(r.cooperativa_id) },
-    { key: "tipo_destinatario", label: "Destinatário" },
-    { key: "tipo_frete_padrao", label: "Frete padrão", render: (r) => fretePadraoLabel(r.tipo_frete_padrao) },
-    { key: "cst_icms_padrao", label: "CST ICMS", render: (r) => r.cst_icms_padrao?.trim() || "-" },
-    { key: "ativo", label: "Status", render: (r) => <AtivoBadge ativo={r.ativo} /> },
-  ];
+  // Resumo das cooperativas liberadas para a grid.
+  const resumoCoops = (ids: string[] = []) => {
+    const validos = ids.filter((id) => coops.some((c) => c.id === id));
+    if (validos.length === 0) return "—";
+    if (coopsAtivas.length > 0 && coopsAtivas.every((c) => validos.includes(c.id))) return "Todas";
+    if (validos.length <= 2) return validos.map(coopName).join(", ");
+    return `${validos.length} cooperativas`;
+  };
+
+  const selecionadas = form.cooperativa_ids ?? [];
+  const todasSelecionadas = coopsAtivas.length > 0 && coopsAtivas.every((c) => selecionadas.includes(c.id));
+
+  const toggleCoop = (id: string, checked: boolean) =>
+    set(
+      "cooperativa_ids",
+      checked ? [...selecionadas, id] : selecionadas.filter((x) => x !== id),
+    );
+
+  const toggleTodas = (checked: boolean) =>
+    set("cooperativa_ids", checked ? coopsAtivas.map((c) => c.id) : []);
+
+  const submit = async () => {
+    // Validações: CFOP, nome e ao menos uma cooperativa liberada.
+    if (!form.cfop?.trim()) {
+      toast.error("Informe o CFOP do modelo.");
+      setTab("dados");
+      return;
+    }
+    if (!form.nome_modelo?.trim()) {
+      toast.error("Informe o nome do modelo.");
+      setTab("dados");
+      return;
+    }
+    if (selecionadas.length === 0) {
+      toast.error("Selecione ao menos uma cooperativa liberada.");
+      setTab("cooperativas");
+      return;
+    }
+    await save.mutateAsync(form);
+    setOpen(false);
+  };
 
   return (
     <Layout>
-      <CrudPage
-        title="Modelos de Nota"
-        description="Modelos CFOP 5118, 5923, 5132 e 5133 por cooperativa, com template de dados adicionais."
-        data={data}
-        loading={isLoading}
-        fields={fields}
-        columns={columns}
-        empty={{ ativo: true, tipo_destinatario: "cooperativa", cfop: "5118", tipo_frete_padrao: TIPO_FRETE_DEFAULT, cst_icms_padrao: "", dados_adicionais_template: TEMPLATE_EXEMPLO }}
-        searchKeys={["cfop", "nome_modelo"]}
-        onSave={(r) => save.mutateAsync(r)}
-        onDelete={(id) => del.mutateAsync(id)}
-      />
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Modelos de Nota</h1>
+            <p className="text-sm text-muted-foreground">
+              Modelos CFOP 5118, 5923, 5132 e 5133 liberados para uma ou mais cooperativas.
+            </p>
+          </div>
+          <Button onClick={openNew}>
+            <Plus className="mr-1 h-4 w-4" /> Novo
+          </Button>
+        </div>
+
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar..." className="pl-9" />
+        </div>
+
+        <div className="rounded-lg border bg-card shadow-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>CFOP</TableHead>
+                <TableHead>Modelo</TableHead>
+                <TableHead>Cooperativas liberadas</TableHead>
+                <TableHead>Destinatário</TableHead>
+                <TableHead>Frete padrão</TableHead>
+                <TableHead>CST ICMS</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-24 text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                    Carregando...
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                    Nenhum registro.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtered.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.cfop}</TableCell>
+                    <TableCell>{row.nome_modelo}</TableCell>
+                    <TableCell>{resumoCoops(row.cooperativa_ids)}</TableCell>
+                    <TableCell>{row.tipo_destinatario}</TableCell>
+                    <TableCell>{row.tipo_frete_padrao?.trim() || TIPO_FRETE_DEFAULT}</TableCell>
+                    <TableCell>{row.cst_icms_padrao?.trim() || "-"}</TableCell>
+                    <TableCell>
+                      <AtivoBadge ativo={row.ativo} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                        <Button size="icon" variant="ghost" onClick={() => openEdit(row)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => setDelId(row.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Modal modernizado em abas: Dados, Cooperativas liberadas e Dados adicionais. */}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{form.id ? "Editar" : "Novo"} — Modelo de Nota</DialogTitle>
+            </DialogHeader>
+
+            <Tabs value={tab} onValueChange={setTab}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="dados">Dados do Modelo</TabsTrigger>
+                <TabsTrigger value="cooperativas">
+                  Cooperativas{selecionadas.length > 0 ? ` (${selecionadas.length})` : ""}
+                </TabsTrigger>
+                <TabsTrigger value="adicionais">Dados adicionais</TabsTrigger>
+              </TabsList>
+
+              {/* Aba 1 — Dados do Modelo */}
+              <TabsContent value="dados" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>CFOP</Label>
+                  <Select value={String(form.cfop ?? "")} onValueChange={(v) => set("cfop", v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["5118", "5923", "5132", "5133"].map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Tipo de Destinatário</Label>
+                  <Select
+                    value={String(form.tipo_destinatario ?? "")}
+                    onValueChange={(v) => set("tipo_destinatario", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cooperativa">Cooperativa</SelectItem>
+                      <SelectItem value="armazem_destinatario">Armazém / Destinatário</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Nome do Modelo</Label>
+                  <Input
+                    value={String(form.nome_modelo ?? "")}
+                    onChange={(e) => set("nome_modelo", e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Natureza da Operação</Label>
+                  <Input
+                    value={String(form.natureza_operacao ?? "")}
+                    onChange={(e) => set("natureza_operacao", e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Tipo de frete padrão</Label>
+                  <Select
+                    value={String(form.tipo_frete_padrao ?? "")}
+                    onValueChange={(v) => set("tipo_frete_padrao", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIPO_FRETE_OPTIONS.map((o) => (
+                        <SelectItem key={o} value={o}>
+                          {o}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Valor inicial da prévia; o usuário ainda pode ajustar antes de gerar o PDF.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>CST ICMS padrão</Label>
+                  <Input
+                    value={String(form.cst_icms_padrao ?? "")}
+                    onChange={(e) => set("cst_icms_padrao", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Se vazio, o sistema usa a CST do produto.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <Label>Ativo</Label>
+                  <Switch checked={Boolean(form.ativo)} onCheckedChange={(c) => set("ativo", c)} />
+                </div>
+              </TabsContent>
+
+              {/* Aba 2 — Cooperativas liberadas */}
+              <TabsContent value="cooperativas" className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Selecione as cooperativas que podem usar este modelo.
+                  </p>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                    <Checkbox checked={todasSelecionadas} onCheckedChange={(c) => toggleTodas(Boolean(c))} />
+                    Selecionar todas
+                  </label>
+                </div>
+                <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-2">
+                  {coopsAtivas.length === 0 ? (
+                    <p className="p-2 text-sm text-muted-foreground">Nenhuma cooperativa ativa cadastrada.</p>
+                  ) : (
+                    coopsAtivas.map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted"
+                      >
+                        <Checkbox
+                          checked={selecionadas.includes(c.id)}
+                          onCheckedChange={(checked) => toggleCoop(c.id, Boolean(checked))}
+                        />
+                        <span className="text-sm">{c.razao_social}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {selecionadas.length} cooperativa(s) selecionada(s). Obrigatório ao menos uma.
+                </p>
+              </TabsContent>
+
+              {/* Aba 3 — Dados adicionais */}
+              <TabsContent value="adicionais" className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Template de Dados Adicionais</Label>
+                  <Textarea
+                    rows={8}
+                    value={String(form.dados_adicionais_template ?? "")}
+                    onChange={(e) => set("dados_adicionais_template", e.target.value)}
+                  />
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="mb-2 text-xs font-medium text-foreground">Variáveis disponíveis</p>
+                  <div className="space-y-2">
+                    {VARIAVEIS_DISPONIVEIS.map((g) => (
+                      <div key={g.grupo}>
+                        <p className="text-xs text-muted-foreground">{g.grupo}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {g.itens.map((v) => (
+                            <Badge key={v} variant="secondary" className="font-mono text-[11px]">
+                              {v}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={submit}>Salvar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={!!delId} onOpenChange={(o) => !o && setDelId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir registro?</AlertDialogTitle>
+              <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={async () => {
+                  if (delId) await del.mutateAsync(delId);
+                  setDelId(null);
+                }}
+              >
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </Layout>
   );
 }
