@@ -198,8 +198,84 @@ export const useProdutos = () => useList<Produto>("produtos", "descricao");
 export const useSaveProduto = () => useUpsert<Produto>("produtos");
 export const useDeleteProduto = () => useRemove("produtos");
 
-export const useModelos = () => useList<ModeloNota>("modelos_nota");
-export const useSaveModelo = () => useUpsert<ModeloNota>("modelos_nota");
+// Modelos de Nota: a liberação por cooperativa é N:N (tabela modelo_nota_cooperativas).
+// Carregamos os modelos e anexamos as cooperativas liberadas de cada um em memória.
+export const useModelos = () =>
+  useQuery({
+    queryKey: ["modelos_nota"],
+    queryFn: async () => {
+      const [{ data: modelos, error }, { data: vinculos, error: vincError }] = await Promise.all([
+        supabase.from("modelos_nota").select("*").order("created_at", { ascending: false }),
+        supabase.from("modelo_nota_cooperativas").select("modelo_nota_id, cooperativa_id"),
+      ]);
+      if (error) throw error;
+      if (vincError) throw vincError;
+
+      const porModelo = new Map<string, string[]>();
+      (vinculos ?? []).forEach((v) => {
+        const list = porModelo.get(v.modelo_nota_id) ?? [];
+        list.push(v.cooperativa_id);
+        porModelo.set(v.modelo_nota_id, list);
+      });
+
+      return (modelos ?? []).map((m) => ({
+        ...(m as ModeloNota),
+        // Fallback ao legado cooperativa_id quando não houver vínculos migrados.
+        cooperativa_ids:
+          porModelo.get(m.id) ?? (m.cooperativa_id ? [m.cooperativa_id] : []),
+      })) as ModeloNota[];
+    },
+  });
+
+// Salva o modelo e sincroniza as cooperativas liberadas na tabela N:N.
+export const useSaveModelo = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (record: Partial<ModeloNota>) => {
+      const { cooperativa_ids, ...modeloFields } = record as Partial<ModeloNota> & {
+        cooperativa_ids?: string[];
+      };
+      const liberadas = cooperativa_ids ?? [];
+      // Mantém o campo legado coerente com a primeira cooperativa liberada (compatibilidade).
+      const payload = { ...modeloFields, cooperativa_id: liberadas[0] ?? null };
+
+      let modeloId = (record as { id?: string }).id;
+      if (modeloId) {
+        const { id, ...rest } = payload as Record<string, unknown>;
+        const { error } = await supabase.from("modelos_nota").update(rest as never).eq("id", modeloId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from("modelos_nota")
+          .insert(payload as never)
+          .select("id")
+          .single();
+        if (error) throw error;
+        modeloId = (data as { id: string }).id;
+      }
+
+      // Sincroniza vínculos: remove os antigos e insere os selecionados.
+      const { error: delError } = await supabase
+        .from("modelo_nota_cooperativas")
+        .delete()
+        .eq("modelo_nota_id", modeloId);
+      if (delError) throw delError;
+
+      if (liberadas.length > 0) {
+        const { error: insError } = await supabase
+          .from("modelo_nota_cooperativas")
+          .insert(liberadas.map((cooperativa_id) => ({ modelo_nota_id: modeloId, cooperativa_id })));
+        if (insError) throw insError;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["modelos_nota"] });
+      toast.success("Registro salvo.");
+    },
+    onError: (e: Error) => toast.error("Erro ao salvar: " + e.message),
+  });
+};
+
 export const useDeleteModelo = () => useRemove("modelos_nota");
 
 export const useTiposContrato = () => useList<TipoContrato>("tipos_contrato");
