@@ -15,13 +15,24 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, FileSpreadsheet, RefreshCw, Trash2, CheckCircle2, AlertTriangle, Copy } from "lucide-react";
+import {
+  Upload,
+  FileSpreadsheet,
+  RefreshCw,
+  Trash2,
+  CheckCircle2,
+  AlertTriangle,
+  Copy,
+  HelpCircle,
+} from "lucide-react";
 import { useReport } from "@/context/ReportContext";
 import { parseGrl019, summarize, type ImportDiagnostics } from "@/lib/grl019";
 import { syncArmazensFromGrl019, useCooperativas, type SyncArmazensFromGrl019Result } from "@/lib/db";
@@ -116,11 +127,45 @@ export default function Importar() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Importar GRL019</h1>
-          <p className="text-sm text-muted-foreground">
-            O relatório é salvo apenas no seu navegador (IndexedDB). Nunca é enviado ao banco de dados.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Importar GRL019</h1>
+            <p className="text-sm text-muted-foreground">
+              O relatório é salvo apenas no seu navegador (IndexedDB). Nunca é enviado ao banco de dados.
+            </p>
+          </div>
+
+          {/* Apoio visual antes da importação, sem interferir na leitura ou validação do GRL019. */}
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto">
+                <HelpCircle className="mr-1 h-4 w-4" />
+                Ver exemplo de filtros
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Exemplo de filtros do GRL019</DialogTitle>
+                <DialogDescription>
+                  Use este modelo como referência ao gerar o relatório GRL019 no sistema.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="rounded-md border bg-muted/30 p-2">
+                <img
+                  src="/GRL019_Tutorial.png"
+                  alt="Exemplo de filtros para gerar o relatório GRL019"
+                  className="max-h-[70vh] w-full max-w-full rounded object-contain"
+                />
+              </div>
+
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button">Fechar</Button>
+                </DialogClose>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <input ref={inputRef} type="file" accept=".xlsx,.xls" hidden onChange={onPick} />
