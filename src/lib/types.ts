@@ -53,7 +53,8 @@ export type TipoDestinatario = "cooperativa" | "armazem_destinatario";
 
 export interface ModeloNota {
   id: string;
-  cooperativa_id: string;
+  // Legado: cooperativa única. Mantido por compatibilidade; a liberação passa a ser N:N via cooperativa_ids.
+  cooperativa_id: string | null;
   cfop: string;
   nome_modelo: string;
   natureza_operacao: string | null;
@@ -64,6 +65,8 @@ export interface ModeloNota {
   ativo: boolean;
   created_at: string;
   updated_at: string;
+  // Cooperativas liberadas para usar este modelo (tabela modelo_nota_cooperativas).
+  cooperativa_ids?: string[];
 }
 
 export interface TipoContrato {
