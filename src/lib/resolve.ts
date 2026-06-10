@@ -160,9 +160,17 @@ export function resolveContrato(
     const cfopParametrizado = tipoContrato.cfop?.trim() || "";
     modelo = findModeloAtivo(cad.modelos, cooperativa.id, cfopParametrizado, tipoContrato.modelo_nota_id);
     if (!modelo) {
-      errors.push(
-        `Modelo CFOP ${cfopParametrizado || "vinculado"} não encontrado para a cooperativa ${coopDisplayName(cooperativa)}. Verifique se existe um Modelo de Nota ativo com CFOP ${cfopParametrizado || "compatível"} vinculado à mesma cooperativa do GRL019.`,
-      );
+      // Se o modelo vinculado existe mas não está liberado para esta cooperativa, avisa de forma clara.
+      const modeloVinculado = findModeloPorId(cad.modelos, tipoContrato.modelo_nota_id);
+      if (modeloVinculado && modeloVinculado.ativo && !modeloLiberadoPara(modeloVinculado, cooperativa.id)) {
+        errors.push(
+          `O modelo "${modeloVinculado.nome_modelo}" (CFOP ${modeloVinculado.cfop}) não está liberado para a cooperativa ${coopDisplayName(cooperativa)}. Libere este modelo para a cooperativa no cadastro de Modelos de Nota.`,
+        );
+      } else {
+        errors.push(
+          `Modelo CFOP ${cfopParametrizado || "vinculado"} não encontrado para a cooperativa ${coopDisplayName(cooperativa)}. Verifique se existe um Modelo de Nota ativo com CFOP ${cfopParametrizado || "compatível"} liberado para a mesma cooperativa do GRL019.`,
+        );
+      }
     } else if (cfopParametrizado && modelo.cfop !== cfopParametrizado) {
       errors.push(
         `O tipo de contrato ${linhaParametrizacao.codContrato} aponta para CFOP ${cfopParametrizado}, mas o modelo vinculado está cadastrado como CFOP ${modelo.cfop}. Revise o cadastro de Tipos de Contrato.`,
