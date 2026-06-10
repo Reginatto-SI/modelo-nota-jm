@@ -64,6 +64,7 @@ const modeloBase: ModeloNota = {
   natureza_operacao: null,
   tipo_destinatario: "cooperativa",
   tipo_frete_padrao: null,
+  cst_icms_padrao: null,
   dados_adicionais_template: null,
   ativo: true,
   created_at: "",
@@ -102,6 +103,21 @@ describe("buildNota", () => {
     const nota = buildNota(resolveResult(), "5118", modeloBase);
 
     expect(nota.tpFrete).toBe(TIPO_FRETE_DEFAULT);
+  });
+
+  it("usa a CST ICMS padrão do modelo quando preenchida", () => {
+    const nota = buildNota(resolveResult(), "5118", {
+      ...modeloBase,
+      cst_icms_padrao: "090",
+    });
+
+    expect(nota.produto.cst).toBe("090");
+  });
+
+  it("mantém fallback para a CST do produto quando o modelo não tem CST ICMS padrão", () => {
+    const nota = buildNota(resolveResult(), "5118", modeloBase);
+
+    expect(nota.produto.cst).toBe("041");
   });
 
   it("substitui as variáveis de armazém pelo cadastro encontrado", () => {

@@ -59,6 +59,7 @@ export interface ModeloNota {
   natureza_operacao: string | null;
   tipo_destinatario: TipoDestinatario;
   tipo_frete_padrao: string | null;
+  cst_icms_padrao: string | null;
   dados_adicionais_template: string | null;
   ativo: boolean;
   created_at: string;

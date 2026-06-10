@@ -198,9 +198,11 @@ export function resolveContrato(
   const produto = cad.produtos.find(
     (p) => p.ativo && p.codigo_produto.trim() === searchedRow.codItem.trim(),
   );
+  // A CST exigida para o PDF pode vir do modelo; só cai para o produto quando o modelo não parametriza.
+  const hasCstIcmsForPdf = Boolean(modelo?.cst_icms_padrao?.trim() || produto?.cst_icms?.trim());
   if (!produto) {
     warnings.push(`Produto código "${searchedRow.codItem}" não está cadastrado ou ativo.`);
-  } else if (!produto.ncm || !produto.cst_icms) {
+  } else if (!produto.ncm || !hasCstIcmsForPdf) {
     warnings.push("Produto cadastrado sem NCM ou CST.");
   }
 
@@ -228,7 +230,7 @@ export function resolveContrato(
       modelo &&
       produto &&
       produto?.ncm &&
-      produto?.cst_icms &&
+      hasCstIcmsForPdf &&
       errors.length === 0 &&
       !isExpedicaoVinculadaRecebimento,
   );

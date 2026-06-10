@@ -66,6 +66,7 @@ const modelo5118: ModeloNota = {
   natureza_operacao: null,
   tipo_destinatario: "cooperativa",
   tipo_frete_padrao: null,
+  cst_icms_padrao: null,
   dados_adicionais_template: null,
   ativo: true,
   created_at: "",
@@ -153,6 +154,16 @@ describe("resolveContrato", () => {
 
     expect(res.errors).toEqual([]);
     expect(res.modelo?.cfop).toBe("5118");
+  });
+
+  it("aceita CST ICMS do modelo quando o produto não tem CST cadastrada", () => {
+    const res = resolveContrato(report, rowBase, cadastros({
+      modelos: [{ ...modelo5118, cst_icms_padrao: "090" }, modelo5923],
+      produtos: [{ ...produto, cst_icms: null }],
+    }));
+
+    expect(res.podeGerar).toBe(true);
+    expect(res.warnings).not.toContain("Produto cadastrado sem NCM ou CST.");
   });
 
   it("bloqueia duplicidade ativa para mesma cooperativa, código e TP FATURAMENTO", () => {
