@@ -47,6 +47,12 @@ export default function ModelosNota() {
       options: TIPO_FRETE_OPTIONS.map((option) => ({ value: option, label: option })),
       helper: "Valor inicial da prévia; o usuário ainda pode ajustar antes de gerar o PDF.",
     },
+    // CST opcional por Modelo de Nota/CFOP; o PDF cai para a CST do produto quando ficar vazia.
+    {
+      name: "cst_icms_padrao",
+      label: "CST ICMS padrão",
+      helper: "Quando preenchida, esta CST será usada no PDF deste modelo. Se vazio, o sistema usa a CST do produto.",
+    },
     { name: "dados_adicionais_template", label: "Template de Dados Adicionais", type: "textarea", helper: "Use variáveis como {{produtor_nome}}, {{produto}}, {{valor_total}}, {{placa_cavalo}}..." },
     { name: "ativo", label: "Ativo", type: "switch" },
   ];
@@ -61,6 +67,7 @@ export default function ModelosNota() {
     { key: "cooperativa_id", label: "Cooperativa", render: (r) => coopName(r.cooperativa_id) },
     { key: "tipo_destinatario", label: "Destinatário" },
     { key: "tipo_frete_padrao", label: "Frete padrão", render: (r) => fretePadraoLabel(r.tipo_frete_padrao) },
+    { key: "cst_icms_padrao", label: "CST ICMS", render: (r) => r.cst_icms_padrao?.trim() || "-" },
     { key: "ativo", label: "Status", render: (r) => <AtivoBadge ativo={r.ativo} /> },
   ];
 
@@ -73,7 +80,7 @@ export default function ModelosNota() {
         loading={isLoading}
         fields={fields}
         columns={columns}
-        empty={{ ativo: true, tipo_destinatario: "cooperativa", cfop: "5118", tipo_frete_padrao: TIPO_FRETE_DEFAULT, dados_adicionais_template: TEMPLATE_EXEMPLO }}
+        empty={{ ativo: true, tipo_destinatario: "cooperativa", cfop: "5118", tipo_frete_padrao: TIPO_FRETE_DEFAULT, cst_icms_padrao: "", dados_adicionais_template: TEMPLATE_EXEMPLO }}
         searchKeys={["cfop", "nome_modelo"]}
         onSave={(r) => save.mutateAsync(r)}
         onDelete={(id) => del.mutateAsync(id)}

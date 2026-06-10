@@ -160,6 +160,8 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
   const precoSaca = rec.precoUnitIcms || 0;
   const valorUnitario = precoSaca / SACA_KG;
   const quantidade = QUANTIDADE_PADRAO;
+  // CST exibida no PDF: prioridade para o Modelo de Nota/CFOP; se vazio, mantém o fallback do produto.
+  const cstIcmsPdf = modelo.cst_icms_padrao?.trim() || r.produto?.cst_icms?.trim() || "";
 
   const emitente: NotaParty = {
     nome: rec.nomeRazaoSocial,
@@ -219,7 +221,7 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
     produto: {
       descricao: r.produto?.descricao ?? rec.descItem,
       ncm: r.produto?.ncm ?? "",
-      cst: r.produto?.cst_icms ?? "",
+      cst: cstIcmsPdf,
       unidade: r.produto?.unidade ?? "KG",
     },
     quantidade,

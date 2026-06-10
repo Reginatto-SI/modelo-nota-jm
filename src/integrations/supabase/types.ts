@@ -131,6 +131,7 @@ export type Database = {
           cfop: string
           cooperativa_id: string
           created_at: string
+          cst_icms_padrao: string | null
           dados_adicionais_template: string | null
           id: string
           natureza_operacao: string | null
@@ -144,6 +145,7 @@ export type Database = {
           cfop: string
           cooperativa_id: string
           created_at?: string
+          cst_icms_padrao?: string | null
           dados_adicionais_template?: string | null
           id?: string
           natureza_operacao?: string | null
@@ -157,6 +159,7 @@ export type Database = {
           cfop?: string
           cooperativa_id?: string
           created_at?: string
+          cst_icms_padrao?: string | null
           dados_adicionais_template?: string | null
           id?: string
           natureza_operacao?: string | null

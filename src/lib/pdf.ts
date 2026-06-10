@@ -398,7 +398,8 @@ function drawProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
       8: { cellWidth: 18, halign: "right" },
       9: { cellWidth: 15, halign: "right" },
       10: { cellWidth: 13, halign: "right" },
-      11: { cellWidth: 13, halign: "right" },
+      // As larguras somam a largura útil do PDF (192mm) para a borda final acompanhar o cabeçalho.
+      11: { cellWidth: 18, halign: "right" },
     },
     didDrawPage: () => drawFooter(doc, ctx),
   });
