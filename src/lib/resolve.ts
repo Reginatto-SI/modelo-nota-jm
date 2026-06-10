@@ -58,6 +58,14 @@ function coopDisplayName(cooperativa?: Cooperativa, fallback?: string) {
   return cooperativa?.nome_grl019 || cooperativa?.razao_social || fallback || "cooperativa";
 }
 
+// Um modelo está liberado para a cooperativa quando ela consta em cooperativa_ids
+// (relacionamento N:N). Fallback ao campo legado cooperativa_id para registros antigos.
+function modeloLiberadoPara(modelo: ModeloNota, cooperativaId: string) {
+  const liberadas = modelo.cooperativa_ids;
+  if (liberadas && liberadas.length > 0) return liberadas.includes(cooperativaId);
+  return modelo.cooperativa_id === cooperativaId;
+}
+
 function findModeloAtivo(
   modelos: ModeloNota[],
   cooperativaId: string,
@@ -65,10 +73,16 @@ function findModeloAtivo(
   modeloId?: string | null,
 ) {
   if (modeloId) {
-    return modelos.find((m) => m.id === modeloId && m.cooperativa_id === cooperativaId && m.ativo);
+    return modelos.find((m) => m.id === modeloId && m.ativo && modeloLiberadoPara(m, cooperativaId));
   }
 
-  return modelos.find((m) => m.cooperativa_id === cooperativaId && m.cfop === cfop && m.ativo);
+  return modelos.find((m) => m.cfop === cfop && m.ativo && modeloLiberadoPara(m, cooperativaId));
+}
+
+// Modelo existe e está ativo, mas pode não estar liberado para a cooperativa do GRL019.
+function findModeloPorId(modelos: ModeloNota[], modeloId?: string | null) {
+  if (!modeloId) return undefined;
+  return modelos.find((m) => m.id === modeloId);
 }
 
 function findTiposAtivos(tipos: TipoContrato[], cooperativaId: string, row: Grl019Row) {
