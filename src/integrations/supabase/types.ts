@@ -125,11 +125,47 @@ export type Database = {
         }
         Relationships: []
       }
+      modelo_nota_cooperativas: {
+        Row: {
+          cooperativa_id: string
+          created_at: string
+          id: string
+          modelo_nota_id: string
+        }
+        Insert: {
+          cooperativa_id: string
+          created_at?: string
+          id?: string
+          modelo_nota_id: string
+        }
+        Update: {
+          cooperativa_id?: string
+          created_at?: string
+          id?: string
+          modelo_nota_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "modelo_nota_cooperativas_cooperativa_id_fkey"
+            columns: ["cooperativa_id"]
+            isOneToOne: false
+            referencedRelation: "cooperativas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "modelo_nota_cooperativas_modelo_nota_id_fkey"
+            columns: ["modelo_nota_id"]
+            isOneToOne: false
+            referencedRelation: "modelos_nota"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       modelos_nota: {
         Row: {
           ativo: boolean
           cfop: string
-          cooperativa_id: string
+          cooperativa_id: string | null
           created_at: string
           cst_icms_padrao: string | null
           dados_adicionais_template: string | null
@@ -143,7 +179,7 @@ export type Database = {
         Insert: {
           ativo?: boolean
           cfop: string
-          cooperativa_id: string
+          cooperativa_id?: string | null
           created_at?: string
           cst_icms_padrao?: string | null
           dados_adicionais_template?: string | null
@@ -157,7 +193,7 @@ export type Database = {
         Update: {
           ativo?: boolean
           cfop?: string
-          cooperativa_id?: string
+          cooperativa_id?: string | null
           created_at?: string
           cst_icms_padrao?: string | null
           dados_adicionais_template?: string | null
