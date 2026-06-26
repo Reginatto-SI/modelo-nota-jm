@@ -1,4 +1,4 @@
-import type { ModeloNota } from "./types";
+import type { Armazem, Cooperativa, Grl019Row, ModeloNota } from "./types";
 import { normalizeTipoFrete } from "./tipoFrete";
 import { QUANTIDADE_PADRAO, SACA_KG, type ResolveResult } from "./resolve";
 
@@ -28,7 +28,7 @@ export interface Nota {
   naturezaOperacao: string;
   emitente: NotaParty;
   destinatario: NotaParty;
-  produto: { descricao: string; ncm: string; cst: string; unidade: string };
+  produto: { codigo: string; descricao: string; ncm: string; cst: string; unidade: string };
   quantidade: number;
   valorUnitario: number;
   valorTotal: number;
@@ -83,6 +83,96 @@ export function buildNotaPdfFileName(nota: Nota) {
   return sanitizePdfFileName(baseName);
 }
 
+
+export const TEMPLATE_VARIABLE_GROUPS: { grupo: string; itens: string[] }[] = [
+  { grupo: "Contrato", itens: ["{{contrato}}", "{{contrato_vinculado}}", "{{contrato_cliente}}", "{{confirmacao_negocio}}"] },
+  {
+    grupo: "Produtor",
+    itens: [
+      "{{produtor_nome}}",
+      "{{produtor_cpf_cnpj}}",
+      "{{produtor_ie}}",
+      "{{produtor_endereco}}",
+      "{{produtor_municipio}}",
+      "{{produtor_uf}}",
+    ],
+  },
+  {
+    grupo: "Cooperativa",
+    itens: [
+      "{{cooperativa_nome}}",
+      "{{cooperativa_razao_social}}",
+      "{{cooperativa_cnpj}}",
+      "{{cooperativa_ie}}",
+      "{{cooperativa_endereco}}",
+      "{{cooperativa_bairro}}",
+      "{{cooperativa_cep}}",
+      "{{cooperativa_municipio}}",
+      "{{cooperativa_uf}}",
+      "{{cooperativa_telefone}}",
+      "{{cooperativa_endereco_completo}}",
+    ],
+  },
+  {
+    grupo: "Destinatário final / armazém",
+    itens: [
+      "{{armazem_nome}}",
+      "{{armazem_razao_social}}",
+      "{{armazem_cnpj}}",
+      "{{armazem_ie}}",
+      "{{armazem_endereco}}",
+      "{{armazem_bairro}}",
+      "{{armazem_cep}}",
+      "{{armazem_municipio}}",
+      "{{armazem_uf}}",
+      "{{armazem_telefone}}",
+      "{{armazem_endereco_completo}}",
+      "{{destinatario_final_nome}}",
+      "{{destinatario_final_cnpj}}",
+      "{{destinatario_final_ie}}",
+      "{{destinatario_final_endereco}}",
+      "{{destinatario_final_endereco_completo}}",
+      "{{destinatario_final_municipio}}",
+      "{{destinatario_final_uf}}",
+    ],
+  },
+  {
+    grupo: "Produto / modelo fiscal",
+    itens: [
+      "{{produto_codigo}}",
+      "{{produto_descricao}}",
+      "{{produto}}",
+      "{{ncm}}",
+      "{{cst}}",
+      "{{cfop}}",
+      "{{unidade}}",
+      "{{quantidade}}",
+      "{{valor_unitario}}",
+      "{{valor_total}}",
+      "{{natureza_operacao}}",
+    ],
+  },
+  { grupo: "Transporte", itens: ["{{placa_cavalo}}", "{{motorista_nome}}", "{{motorista_cpf}}", "{{nf_referenciada}}"] },
+  {
+    grupo: "CNDs / retenções",
+    itens: [
+      "{{cnd_cooperativa_numero}}",
+      "{{cnd_cooperativa_codigo_autenticacao}}",
+      "{{cnd_cooperativa_vencimento}}",
+      "{{cnd_produtor_numero}}",
+      "{{cnd_produtor_codigo_autenticacao}}",
+      "{{cnd_produtor_vencimento}}",
+      "{{cnd_destinatario_numero}}",
+      "{{cnd_destinatario_codigo_autenticacao}}",
+      "{{cnd_destinatario_vencimento}}",
+      "{{funrural_valor}}",
+      "{{funrural_base}}",
+      "{{retencao_valor}}",
+      "{{retencao_base}}",
+    ],
+  },
+];
+
 const EMPTY_PARTY: NotaParty = {
   nome: "",
   cpfCnpj: "",
@@ -94,51 +184,167 @@ const EMPTY_PARTY: NotaParty = {
   cep: "",
 };
 
+function compact(parts: Array<string | null | undefined>, separator = ", ") {
+  return parts.map((part) => (part ?? "").toString().trim()).filter(Boolean).join(separator);
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const numberValue = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
+function partyFromCooperativa(cooperativa?: Cooperativa): NotaParty {
+  if (!cooperativa) return { ...EMPTY_PARTY };
+  return {
+    nome: cooperativa.razao_social,
+    cpfCnpj: cooperativa.cnpj ?? "",
+    ie: cooperativa.inscricao_estadual ?? "",
+    endereco: cooperativa.endereco ?? "",
+    bairro: cooperativa.bairro ?? "",
+    municipio: cooperativa.municipio ?? "",
+    uf: cooperativa.uf ?? "",
+    cep: cooperativa.cep ?? "",
+  };
+}
+
+function partyFromArmazemOrExpedicao(armazem?: Armazem, expedicao?: Grl019Row): NotaParty {
+  if (armazem) {
+    return {
+      nome: armazem.razao_social,
+      cpfCnpj: armazem.cnpj_cpf ?? "",
+      ie: armazem.inscricao_estadual ?? "",
+      endereco: armazem.endereco ?? "",
+      bairro: armazem.bairro ?? "",
+      municipio: armazem.municipio ?? "",
+      uf: armazem.uf ?? "",
+      cep: armazem.cep ?? "",
+    };
+  }
+
+  if (expedicao) {
+    return {
+      nome: expedicao.nomeRazaoSocial,
+      cpfCnpj: expedicao.cpfCnpj,
+      ie: expedicao.ie,
+      endereco: expedicao.endereco,
+      bairro: "",
+      municipio: expedicao.municipio,
+      uf: expedicao.estado,
+      cep: "",
+    };
+  }
+
+  return { ...EMPTY_PARTY };
+}
+
+function resolveTipoDestinatario(modelo: ModeloNota, which: CfopModelo) {
+  // Compatibilidade com modelos antigos sem tipo_destinatario persistido: mantém o comportamento legado por CFOP.
+  return modelo.tipo_destinatario ?? (which === "5923" ? "armazem_destinatario" : "cooperativa");
+}
+
 function buildVars(n: Nota, r: ResolveResult): Record<string, string> {
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const manual = (value: string | null | undefined, placeholder: string) => {
+    const text = (value ?? "").toString().trim();
+    return text || placeholder;
+  };
   // Placeholder de revisão manual quando o dado não existe em nenhuma origem.
   const ph = (v: string | null | undefined) => {
     const t = (v ?? "").toString().trim();
     return t ? t : "####";
   };
   const exped = r.expedicaoRow;
-  // Nome/CNPJ/IE: cadastro do armazém primeiro; se ausente, dados da linha de EXPEDIÇÃO do GRL019.
   const armazemNome = r.armazem?.razao_social || exped?.nomeRazaoSocial || "";
   const armazemCnpj = r.armazem?.cnpj_cpf || exped?.cpfCnpj || "";
   const armazemIe = r.armazem?.inscricao_estadual || exped?.ie || "";
-  // Endereço/Município/UF: preferir cadastro; cair para a expedição quando o cadastro não tiver.
   const armazemEndereco = r.armazem?.endereco || exped?.endereco || "";
+  const armazemBairro = r.armazem?.bairro || "";
+  const armazemCep = r.armazem?.cep || "";
   const armazemMunicipio = r.armazem?.municipio || exped?.municipio || "";
   const armazemUf = r.armazem?.uf || exped?.estado || "";
+  const armazemTelefone = r.armazem?.telefone || "";
+  const armazemEnderecoCompleto = compact([armazemEndereco, armazemBairro, armazemCep && `CEP ${armazemCep}`, armazemMunicipio, armazemUf]);
+  const cooperativaEnderecoCompleto = compact([
+    r.cooperativa?.endereco,
+    r.cooperativa?.bairro,
+    r.cooperativa?.cep && `CEP ${r.cooperativa.cep}`,
+    r.cooperativa?.municipio,
+    r.cooperativa?.uf,
+  ]);
+  const contrato = r.searchedRow.contrato;
+  const contratoVinculado = r.searchedRow.contratoVinculado;
+  const confirmacaoNegocio = compact([contrato, contratoVinculado], "/");
+
   return {
-    contrato: ph(r.searchedRow.contrato),
-    contrato_vinculado: ph(r.searchedRow.contratoVinculado),
+    contrato: ph(contrato),
+    contrato_vinculado: ph(contratoVinculado),
     contrato_cliente: ph(r.searchedRow.contratoCliente),
+    confirmacao_negocio: ph(confirmacaoNegocio),
     produtor_nome: ph(n.emitente.nome),
     produtor_cpf_cnpj: ph(n.emitente.cpfCnpj),
     produtor_ie: ph(n.emitente.ie),
+    produtor_endereco: ph(n.emitente.endereco),
+    produtor_municipio: ph(n.emitente.municipio),
+    produtor_uf: ph(n.emitente.uf),
     cooperativa_nome: ph(r.cooperativa?.razao_social),
+    cooperativa_razao_social: ph(r.cooperativa?.razao_social),
     cooperativa_cnpj: ph(r.cooperativa?.cnpj),
     cooperativa_ie: ph(r.cooperativa?.inscricao_estadual),
+    cooperativa_endereco: ph(r.cooperativa?.endereco),
+    cooperativa_bairro: ph(r.cooperativa?.bairro),
+    cooperativa_cep: ph(r.cooperativa?.cep),
+    cooperativa_municipio: ph(r.cooperativa?.municipio),
+    cooperativa_uf: ph(r.cooperativa?.uf),
+    cooperativa_telefone: ph(r.cooperativa?.telefone),
+    cooperativa_endereco_completo: ph(cooperativaEnderecoCompleto),
     armazem_nome: ph(armazemNome),
+    armazem_razao_social: ph(armazemNome),
     armazem_cnpj: ph(armazemCnpj),
     armazem_ie: ph(armazemIe),
     armazem_endereco: ph(armazemEndereco),
+    armazem_bairro: ph(armazemBairro),
+    armazem_cep: ph(armazemCep),
     armazem_municipio: ph(armazemMunicipio),
     armazem_uf: ph(armazemUf),
+    armazem_telefone: ph(armazemTelefone),
+    armazem_endereco_completo: ph(armazemEnderecoCompleto),
+    destinatario_final_nome: ph(armazemNome),
+    destinatario_final_cnpj: ph(armazemCnpj),
+    destinatario_final_ie: ph(armazemIe),
+    destinatario_final_endereco: ph(armazemEndereco),
+    destinatario_final_endereco_completo: ph(armazemEnderecoCompleto),
+    destinatario_final_municipio: ph(armazemMunicipio),
+    destinatario_final_uf: ph(armazemUf),
+    produto_codigo: ph(n.produto.codigo),
+    produto_descricao: ph(n.produto.descricao),
     produto: ph(n.produto.descricao),
     ncm: ph(n.produto.ncm),
+    cst: ph(n.produto.cst),
+    cfop: ph(n.cfop),
+    unidade: ph(n.produto.unidade),
+    natureza_operacao: ph(n.naturezaOperacao),
     quantidade: fmt(n.quantidade),
     valor_unitario: fmt(n.valorUnitario),
     valor_total: fmt(n.valorTotal),
-    placa_cavalo: "########",
+    placa_cavalo: manual(n.placaVeiculo, "########"),
+    motorista_nome: "########",
+    motorista_cpf: "###########",
+    nf_referenciada: "#####",
     cnd_cooperativa_numero: "###########",
     cnd_cooperativa_codigo_autenticacao: "##########",
     cnd_cooperativa_vencimento: "##/##/####",
     cnd_produtor_numero: "###########",
     cnd_produtor_codigo_autenticacao: "##########",
     cnd_produtor_vencimento: "##/##/####",
+    cnd_destinatario_numero: "###########",
+    cnd_destinatario_codigo_autenticacao: "##########",
+    cnd_destinatario_vencimento: "##/##/####",
+    funrural_valor: "R$ ##,##",
+    funrural_base: "R$ ##.###,##",
+    retencao_valor: "R$ ##,##",
+    retencao_base: "R$ ##.###,##",
   };
 }
 
@@ -151,15 +357,29 @@ export function renderTemplate(template: string, vars: Record<string, string>): 
 }
 
 
+export function syncPlacaCavaloPlaceholder(text: string, placa: string): string {
+  const placaSegura = placa.trim() || "########";
+  // Troca somente o token imediato após "PLACA CAVALO:" (placeholder ou placa) e preserva o restante da linha.
+  return text.replace(
+    /(PLACA CAVALO:\s*)(########|\{\{\s*placa_cavalo\s*\}\}|[A-Z]{3}-?\d[A-Z0-9]\d{2})/i,
+    `$1${placaSegura}`,
+  );
+}
+
+export function getPendingPlaceholders(text: string): string[] {
+  const matches = text.match(/##\/##\/####|R\$\s*#+(?:[.,]#+)*|#{2,}|\{\{\s*[a-z_]+\s*\}\}/gi) ?? [];
+  return Array.from(new Set(matches.map((match) => match.trim())));
+}
+
 export function hasPendingPlaceholders(text: string): boolean {
-  return /#{2,}|\{\{[a-z_]+\}\}/i.test(text);
+  return getPendingPlaceholders(text).length > 0;
 }
 
 export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNota): Nota {
   const rec = r.recebimentoRow ?? r.searchedRow;
   const precoSaca = rec.precoUnitIcms || 0;
   const valorUnitario = precoSaca / SACA_KG;
-  const quantidade = QUANTIDADE_PADRAO;
+  const quantidade = toPositiveNumber(modelo.quantidade_padrao) ?? QUANTIDADE_PADRAO;
   // CST exibida no PDF: prioridade para o Modelo de Nota/CFOP; se vazio, mantém o fallback do produto.
   const cstIcmsPdf = modelo.cst_icms_padrao?.trim() || r.produto?.cst_icms?.trim() || "";
 
@@ -174,43 +394,10 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
     cep: "",
   };
 
-  let destinatario: NotaParty = { ...EMPTY_PARTY };
-  if (which === "5923") {
-    if (r.armazem) {
-      destinatario = {
-        nome: r.armazem.razao_social,
-        cpfCnpj: r.armazem.cnpj_cpf ?? "",
-        ie: r.armazem.inscricao_estadual ?? "",
-        endereco: r.armazem.endereco ?? "",
-        bairro: r.armazem.bairro ?? "",
-        municipio: r.armazem.municipio ?? "",
-        uf: r.armazem.uf ?? "",
-        cep: r.armazem.cep ?? "",
-      };
-    } else if (r.expedicaoRow) {
-      destinatario = {
-        nome: r.expedicaoRow.nomeRazaoSocial,
-        cpfCnpj: r.expedicaoRow.cpfCnpj,
-        ie: r.expedicaoRow.ie,
-        endereco: r.expedicaoRow.endereco,
-        bairro: "",
-        municipio: r.expedicaoRow.municipio,
-        uf: r.expedicaoRow.estado,
-        cep: "",
-      };
-    }
-  } else if (r.cooperativa) {
-    destinatario = {
-      nome: r.cooperativa.razao_social,
-      cpfCnpj: r.cooperativa.cnpj ?? "",
-      ie: r.cooperativa.inscricao_estadual ?? "",
-      endereco: r.cooperativa.endereco ?? "",
-      bairro: r.cooperativa.bairro ?? "",
-      municipio: r.cooperativa.municipio ?? "",
-      uf: r.cooperativa.uf ?? "",
-      cep: r.cooperativa.cep ?? "",
-    };
-  }
+  const tipoDestinatario = resolveTipoDestinatario(modelo, which);
+  const destinatario = tipoDestinatario === "armazem_destinatario"
+    ? partyFromArmazemOrExpedicao(r.armazem, r.expedicaoRow)
+    : partyFromCooperativa(r.cooperativa);
 
   const nota: Nota = {
     cfop: modelo.cfop,
@@ -219,6 +406,7 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
     emitente,
     destinatario,
     produto: {
+      codigo: r.produto?.codigo_produto ?? rec.codItem,
       descricao: r.produto?.descricao ?? rec.descItem,
       ncm: r.produto?.ncm ?? "",
       cst: cstIcmsPdf,

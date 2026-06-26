@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNota, buildNotaPdfFileName } from "./nota";
+import { buildNota, buildNotaPdfFileName, syncPlacaCavaloPlaceholder } from "./nota";
 import { TIPO_FRETE_DEFAULT } from "./tipoFrete";
 import type { Cooperativa, Grl019Row, ModeloNota, Produto } from "./types";
 import type { ResolveResult } from "./resolve";
@@ -65,6 +65,7 @@ const modeloBase: ModeloNota = {
   tipo_destinatario: "cooperativa",
   tipo_frete_padrao: null,
   cst_icms_padrao: null,
+  quantidade_padrao: null,
   dados_adicionais_template: null,
   ativo: true,
   created_at: "",
@@ -211,4 +212,129 @@ describe("buildNota", () => {
     expect(buildNotaPdfFileName(nota)).not.toContain("undefined");
     expect(buildNotaPdfFileName(nota)).not.toContain("null");
   });
+
+  it("monta 5118 com destinatário cooperativa, CST do modelo e fallback de quantidade", () => {
+    const res = resolveResult();
+    const nota = buildNota(res, "5118", {
+      ...modeloBase,
+      cst_icms_padrao: "51",
+      dados_adicionais_template:
+        "CONF {{confirmacao_negocio}} CONTRATO {{contrato}} ENTREGA {{destinatario_final_nome}} CND {{cnd_produtor_numero}}",
+    });
+
+    expect(nota.cfop).toBe("5118");
+    expect(nota.produto.cst).toBe("51");
+    expect(nota.destinatario.nome).toBe("Cooperativa");
+    expect(nota.quantidade).toBe(30000);
+    expect(nota.dadosAdicionais).toContain("CONF C-1 CONTRATO C-1");
+    expect(nota.dadosAdicionais).toContain("###########");
+  });
+
+  it("monta 5923 com destinatário final por tipo_destinatario e dados completos de template", () => {
+    const res = resolveResult();
+    res.expedicaoRow = {
+      ...row,
+      contrato: "C-2",
+      contratoVinculado: "C-1",
+      tpFaturamento: "EXPEDIÇÃO",
+      nomeRazaoSocial: "CARGILL AGRICOLA S A",
+      cpfCnpj: "60000000000100",
+      ie: "IE-CARGILL",
+      endereco: "Rodovia MT 010",
+      municipio: "Sorriso",
+      estado: "MT",
+    };
+    const nota = buildNota(res, "5923", {
+      ...modeloBase,
+      cfop: "5923",
+      nome_modelo: "Modelo 5923",
+      tipo_destinatario: "armazem_destinatario",
+      cst_icms_padrao: "41",
+      dados_adicionais_template:
+        "REF {{nf_referenciada}} COOP {{cooperativa_razao_social}} DEST {{destinatario_final_nome}} CND {{cnd_destinatario_numero}}",
+    });
+
+    expect(nota.cfop).toBe("5923");
+    expect(nota.produto.cst).toBe("41");
+    expect(nota.destinatario.nome).toBe("CARGILL AGRICOLA S A");
+    expect(nota.destinatario.nome).not.toBe("Cooperativa");
+    expect(nota.dadosAdicionais).toContain("REF #####");
+    expect(nota.dadosAdicionais).toContain("COOP Cooperativa");
+    expect(nota.dadosAdicionais).toContain("CND ###########");
+  });
+
+  it("monta 5132 sozinho com destinatário cooperativa, quantidade parametrizada e contrato com zeros", () => {
+    const res = resolveResult();
+    res.searchedRow = { ...row, contrato: "0000431969", contratoVinculado: "" };
+    res.recebimentoRow = res.searchedRow;
+    res.expedicaoRow = {
+      ...row,
+      contrato: "EXP-1",
+      tpFaturamento: "EXPEDIÇÃO",
+      nomeRazaoSocial: "COFCO INTERNATIONAL BRASIL S A",
+      cpfCnpj: "11111111000191",
+      ie: "IE-COFCO",
+      endereco: "Estrada Rural",
+      municipio: "Rondonópolis",
+      estado: "MT",
+    };
+    const nota = buildNota(res, "5132", {
+      ...modeloBase,
+      cfop: "5132",
+      nome_modelo: "Modelo 5132",
+      cst_icms_padrao: "51",
+      quantidade_padrao: 600000,
+      dados_adicionais_template:
+        "CONF {{confirmacao_negocio}} CONTRATO {{contrato}} ENTREGA {{destinatario_final_nome}} VALOR {{retencao_valor}}",
+    });
+
+    expect(nota.cfop).toBe("5132");
+    expect(nota.produto.cst).toBe("51");
+    expect(nota.destinatario.nome).toBe("Cooperativa");
+    expect(nota.quantidade).toBe(600000);
+    expect(nota.dadosAdicionais).toContain("CONF 0000431969 CONTRATO 0000431969");
+    expect(nota.dadosAdicionais).toContain("COFCO INTERNATIONAL BRASIL S A");
+    expect(buildNotaPdfFileName(nota)).toContain("0000431969");
+  });
+
+  it("mantém fallback por CFOP quando tipo_destinatario está ausente em modelo legado", () => {
+    const res = resolveResult();
+    res.expedicaoRow = { ...row, nomeRazaoSocial: "DESTINO FINAL", cpfCnpj: "222", tpFaturamento: "EXPEDIÇÃO" };
+    const modeloLegado = { ...modeloBase, cfop: "5923", tipo_destinatario: null };
+
+    const nota = buildNota(res, "5923", modeloLegado);
+
+    expect(nota.destinatario.nome).toBe("DESTINO FINAL");
+  });
+
+
+  it("sincroniza somente o placeholder imediato da placa cavalo sem apagar o restante da linha", () => {
+    const texto =
+      "PLACA CAVALO: ######## CND NUM: 123 COD.AUT: ABC\nPRODUTOR: CND NUM: 456";
+
+    expect(syncPlacaCavaloPlaceholder(texto, "ABC1D23")).toBe(
+      "PLACA CAVALO: ABC1D23 CND NUM: 123 COD.AUT: ABC\nPRODUTOR: CND NUM: 456",
+    );
+  });
+
+  it("sincroniza variável crua da placa cavalo sem alterar textos posteriores", () => {
+    const texto = "PLACA CAVALO: {{placa_cavalo}} CND PRODUTOR: ###########";
+
+    expect(syncPlacaCavaloPlaceholder(texto, "XYZ9Z99")).toBe(
+      "PLACA CAVALO: XYZ9Z99 CND PRODUTOR: ###########",
+    );
+  });
+
+  it("atualiza placa já preenchida sem alterar CND na mesma linha", () => {
+    const texto = "PLACA CAVALO: ABC1D23 CND NUM: 123";
+
+    expect(syncPlacaCavaloPlaceholder(texto, "XYZ9Z99")).toBe("PLACA CAVALO: XYZ9Z99 CND NUM: 123");
+  });
+
+  it("mantém texto intacto quando não existe marcador de placa cavalo", () => {
+    const texto = "CND NUM: 123";
+
+    expect(syncPlacaCavaloPlaceholder(texto, "XYZ9Z99")).toBe("CND NUM: 123");
+  });
+
 });

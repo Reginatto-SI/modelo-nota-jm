@@ -198,6 +198,13 @@ export const useProdutos = () => useList<Produto>("produtos", "descricao");
 export const useSaveProduto = () => useUpsert<Produto>("produtos");
 export const useDeleteProduto = () => useRemove("produtos");
 
+
+function normalizeQuantidadePadrao(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const numberValue = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
 // Modelos de Nota: a liberação por cooperativa é N:N (tabela modelo_nota_cooperativas).
 // Carregamos os modelos e anexamos as cooperativas liberadas de cada um em memória.
 export const useModelos = () =>
@@ -220,6 +227,7 @@ export const useModelos = () =>
 
       return (modelos ?? []).map((m) => ({
         ...(m as ModeloNota),
+        quantidade_padrao: normalizeQuantidadePadrao((m as { quantidade_padrao?: unknown }).quantidade_padrao),
         // Fallback ao legado cooperativa_id quando não houver vínculos migrados.
         cooperativa_ids:
           porModelo.get(m.id) ?? (m.cooperativa_id ? [m.cooperativa_id] : []),
@@ -237,7 +245,11 @@ export const useSaveModelo = () => {
       };
       const liberadas = cooperativa_ids ?? [];
       // Mantém o campo legado coerente com a primeira cooperativa liberada (compatibilidade).
-      const payload = { ...modeloFields, cooperativa_id: liberadas[0] ?? null };
+      const payload = {
+        ...modeloFields,
+        quantidade_padrao: normalizeQuantidadePadrao(modeloFields.quantidade_padrao),
+        cooperativa_id: liberadas[0] ?? null,
+      };
 
       let modeloId = (record as { id?: string }).id;
       if (modeloId) {

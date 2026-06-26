@@ -67,6 +67,7 @@ const modelo5118: ModeloNota = {
   tipo_destinatario: "cooperativa",
   tipo_frete_padrao: null,
   cst_icms_padrao: null,
+  quantidade_padrao: null,
   dados_adicionais_template: null,
   ativo: true,
   created_at: "",
@@ -274,4 +275,41 @@ describe("resolveContrato", () => {
       "Parametrização suspeita: o CFOP 5923 deve ser gerado pela operação casada 5118 + 5923, não diretamente pela expedição.",
     );
   });
+
+  it("não oferece operação casada para CFOP 5132 mesmo com modelo 5923 cadastrado", () => {
+    const modelo5132: ModeloNota = {
+      ...modelo5118,
+      id: "modelo-5132",
+      cfop: "5132",
+      nome_modelo: "Modelo 5132",
+      cst_icms_padrao: "51",
+    };
+    const res = resolveContrato(report, rowBase, cadastros({
+      modelos: [modelo5132, modelo5923],
+      tipos: [tipoContrato({ cfop: "5132", modelo_nota_id: modelo5132.id, gera_operacao_casada: true })],
+    }));
+
+    expect(res.cfop).toBe("5132");
+    expect(res.ofereceCasada).toBe(false);
+    expect(res.modelo5923).toBeUndefined();
+  });
+
+  it("alerta contrato 5132 com suspeita de zeros à esquerda descaracterizados sem corrigir o valor", () => {
+    const modelo5132: ModeloNota = {
+      ...modelo5118,
+      id: "modelo-5132",
+      cfop: "5132",
+      nome_modelo: "Modelo 5132",
+      cst_icms_padrao: "51",
+    };
+    const row5132 = { ...rowBase, contrato: "431969", contratoVinculado: "" };
+    const res = resolveContrato({ ...report, rows: [row5132] }, row5132, cadastros({
+      modelos: [modelo5132],
+      tipos: [tipoContrato({ cfop: "5132", modelo_nota_id: modelo5132.id })],
+    }));
+
+    expect(res.searchedRow.contrato).toBe("431969");
+    expect(res.warnings.some((warning) => warning.includes("zeros à esquerda"))).toBe(true);
+  });
+
 });

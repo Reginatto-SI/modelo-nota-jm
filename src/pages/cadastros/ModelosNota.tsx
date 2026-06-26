@@ -45,33 +45,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useModelos, useSaveModelo, useDeleteModelo, useCooperativas } from "@/lib/db";
 import { TIPO_FRETE_DEFAULT, TIPO_FRETE_OPTIONS } from "@/lib/tipoFrete";
+import { TEMPLATE_VARIABLE_GROUPS } from "@/lib/nota";
 import type { ModeloNota } from "@/lib/types";
 
 const TEMPLATE_EXEMPLO =
   "Contrato: {{contrato}} / Vinculado: {{contrato_vinculado}} / Cliente: {{contrato_cliente}}\nProdutor: {{produtor_nome}} - CPF/CNPJ: {{produtor_cpf_cnpj}}\nProduto: {{produto}} - NCM: {{ncm}}\nQtd: {{quantidade}} KG x R$ {{valor_unitario}} = R$ {{valor_total}}\nPLACA CAVALO: {{placa_cavalo}}\nCND PRODUTOR NUM: {{cnd_produtor_numero}} COD.AUT: {{cnd_produtor_codigo_autenticacao}} VENC: {{cnd_produtor_vencimento}}";
 
 // Variáveis disponíveis para o template de Dados Adicionais.
-const VARIAVEIS_DISPONIVEIS: { grupo: string; itens: string[] }[] = [
-  { grupo: "Contrato", itens: ["{{contrato}}", "{{contrato_vinculado}}", "{{contrato_cliente}}"] },
-  { grupo: "Produtor", itens: ["{{produtor_nome}}", "{{produtor_cpf_cnpj}}"] },
-  {
-    grupo: "Armazém / Destinatário",
-    itens: [
-      "{{armazem_nome}}",
-      "{{armazem_cnpj}}",
-      "{{armazem_ie}}",
-      "{{armazem_endereco}}",
-      "{{armazem_municipio}}",
-      "{{armazem_uf}}",
-    ],
-  },
-  { grupo: "Produto", itens: ["{{produto}}", "{{ncm}}", "{{quantidade}}", "{{valor_unitario}}", "{{valor_total}}"] },
-  { grupo: "Transporte", itens: ["{{placa_cavalo}}"] },
-  {
-    grupo: "CND Produtor",
-    itens: ["{{cnd_produtor_numero}}", "{{cnd_produtor_codigo_autenticacao}}", "{{cnd_produtor_vencimento}}"],
-  },
-];
+// Fonte única com o motor de renderização para evitar variável suportada mas escondida na tela.
+const VARIAVEIS_DISPONIVEIS = TEMPLATE_VARIABLE_GROUPS;
 
 type ModeloForm = Partial<ModeloNota> & { cooperativa_ids?: string[] };
 
@@ -81,6 +63,7 @@ const EMPTY: ModeloForm = {
   cfop: "5118",
   tipo_frete_padrao: TIPO_FRETE_DEFAULT,
   cst_icms_padrao: "",
+  quantidade_padrao: null,
   dados_adicionais_template: TEMPLATE_EXEMPLO,
   cooperativa_ids: [],
 };
@@ -337,6 +320,19 @@ export default function ModelosNota() {
                   />
                   <p className="text-xs text-muted-foreground">
                     Se vazio, o sistema usa a CST do produto.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Quantidade padrão (KG)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={String(form.quantidade_padrao ?? "")}
+                    onChange={(e) => set("quantidade_padrao", e.target.value ? Number(e.target.value) : null)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Valor inicial da prévia; se vazio, usa 30.000 KG.
                   </p>
                 </div>
 
