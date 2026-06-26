@@ -179,7 +179,19 @@ export function resolveContrato(
     }
   }
 
+  if (tipoContrato?.exige_contrato_vinculado && !vinculado) {
+    errors.push(
+      `O tipo de contrato ${linhaParametrizacao.codContrato} exige contrato vinculado, mas a coluna CONTRATO VINCULADO não localizou um vínculo válido no GRL019.`,
+    );
+  }
+
   const cfop = modelo?.cfop;
+  const contratoNumericoSemZeroInicial = /^\d+$/.test(searchedRow.contrato) && !searchedRow.contrato.startsWith("0");
+  if (cfop === "5132" && contratoNumericoSemZeroInicial && searchedRow.contrato.length < 10) {
+    warnings.push(
+      "Contrato do CFOP 5132 parece menor que o formato esperado com zeros à esquerda. O sistema não corrige automaticamente; confira o GRL019 antes de gerar o PDF.",
+    );
+  }
   const ofereceCasada = cfop === "5118" && Boolean(tipoContrato?.gera_operacao_casada);
   const expedicaoComoVinculo5923 = isExpedicaoVinculadaRecebimento && ofereceCasada;
 
