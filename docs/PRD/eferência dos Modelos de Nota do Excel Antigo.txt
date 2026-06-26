@@ -1,0 +1,600 @@
+# Referência dos Modelos de Nota do Excel Antigo
+
+Este documento descreve o comportamento esperado dos modelos antigos gerados em Excel para o sistema **Modelo de Nota JM**.
+
+Os dados abaixo foram sanitizados. Eles não representam documentos fiscais reais e devem ser usados apenas como referência funcional para implementação, parametrização, testes e validação dos modelos orientativos.
+
+## Objetivo
+
+Garantir que o sistema novo consiga reproduzir, no mínimo, o comportamento funcional do Excel antigo para os modelos:
+
+* CFOP 5118
+* CFOP 5923
+* CFOP 5132
+
+A regra principal é:
+
+> Se o Excel antigo fazia, o sistema novo precisa fazer igual ou melhor, com mais segurança, parametrização, validação e rastreabilidade.
+
+## Premissas gerais
+
+* O sistema não emite NF-e real.
+* O sistema gera apenas PDF orientativo para o produtor rural.
+* Nenhum texto fiscal deve ser hardcoded diretamente na geração do PDF.
+* Os textos devem ficar em templates parametrizáveis por modelo/CFOP e, quando aplicável, por cooperativa.
+* Campos sem origem automática devem permanecer como placeholders editáveis para revisão do usuário.
+* O usuário deve conseguir revisar os dados antes da geração do PDF.
+* O sistema deve alertar ou exigir confirmação quando houver placeholders pendentes.
+
+## Variáveis esperadas nos templates
+
+### Contrato
+
+| Variável                  | Descrição                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| `{{contrato}}`            | Número do contrato principal pesquisado                                              |
+| `{{contrato_vinculado}}`  | Número do contrato vinculado, quando existir                                         |
+| `{{contrato_cliente}}`    | Número do contrato externo/cliente, quando existir no GRL019                         |
+| `{{confirmacao_negocio}}` | Confirmação de negócio no formato `contrato/contrato_vinculado` ou apenas `contrato` |
+
+### Produtor
+
+| Variável                 | Descrição                        |
+| ------------------------ | -------------------------------- |
+| `{{produtor_nome}}`      | Nome ou razão social do produtor |
+| `{{produtor_cpf_cnpj}}`  | CPF/CNPJ do produtor             |
+| `{{produtor_ie}}`        | Inscrição estadual do produtor   |
+| `{{produtor_endereco}}`  | Endereço do produtor             |
+| `{{produtor_municipio}}` | Município do produtor            |
+| `{{produtor_uf}}`        | UF do produtor                   |
+
+### Cooperativa
+
+| Variável                            | Descrição                                  |
+| ----------------------------------- | ------------------------------------------ |
+| `{{cooperativa_nome}}`              | Nome da cooperativa                        |
+| `{{cooperativa_razao_social}}`      | Razão social da cooperativa                |
+| `{{cooperativa_cnpj}}`              | CNPJ da cooperativa                        |
+| `{{cooperativa_ie}}`                | Inscrição estadual da cooperativa          |
+| `{{cooperativa_endereco}}`          | Endereço da cooperativa                    |
+| `{{cooperativa_bairro}}`            | Bairro da cooperativa                      |
+| `{{cooperativa_cep}}`               | CEP da cooperativa                         |
+| `{{cooperativa_municipio}}`         | Município da cooperativa                   |
+| `{{cooperativa_uf}}`                | UF da cooperativa                          |
+| `{{cooperativa_telefone}}`          | Telefone da cooperativa                    |
+| `{{cooperativa_endereco_completo}}` | Endereço completo formatado da cooperativa |
+
+### Destinatário final / armazém
+
+| Variável                                   | Descrição                                                 |
+| ------------------------------------------ | --------------------------------------------------------- |
+| `{{armazem_nome}}`                         | Nome do armazém/destinatário final                        |
+| `{{armazem_razao_social}}`                 | Razão social do armazém/destinatário final                |
+| `{{armazem_cnpj}}`                         | CNPJ/CPF do armazém/destinatário final                    |
+| `{{armazem_ie}}`                           | Inscrição estadual do armazém/destinatário final          |
+| `{{armazem_endereco}}`                     | Endereço do armazém/destinatário final                    |
+| `{{armazem_bairro}}`                       | Bairro do armazém/destinatário final                      |
+| `{{armazem_cep}}`                          | CEP do armazém/destinatário final                         |
+| `{{armazem_municipio}}`                    | Município do armazém/destinatário final                   |
+| `{{armazem_uf}}`                           | UF do armazém/destinatário final                          |
+| `{{armazem_telefone}}`                     | Telefone do armazém/destinatário final                    |
+| `{{armazem_endereco_completo}}`            | Endereço completo formatado do armazém/destinatário final |
+| `{{destinatario_final_nome}}`              | Alias para nome do destinatário final                     |
+| `{{destinatario_final_cnpj}}`              | Alias para CNPJ/CPF do destinatário final                 |
+| `{{destinatario_final_ie}}`                | Alias para IE do destinatário final                       |
+| `{{destinatario_final_endereco}}`          | Alias para endereço do destinatário final                 |
+| `{{destinatario_final_endereco_completo}}` | Alias para endereço completo do destinatário final        |
+| `{{destinatario_final_municipio}}`         | Alias para município do destinatário final                |
+| `{{destinatario_final_uf}}`                | Alias para UF do destinatário final                       |
+
+### Produto e modelo fiscal
+
+| Variável                | Descrição                      |
+| ----------------------- | ------------------------------ |
+| `{{produto_codigo}}`    | Código do produto              |
+| `{{produto_descricao}}` | Descrição do produto           |
+| `{{produto}}`           | Descrição do produto           |
+| `{{ncm}}`               | NCM do produto                 |
+| `{{cst}}`               | CST ICMS aplicado ao modelo    |
+| `{{cfop}}`              | CFOP do modelo                 |
+| `{{unidade}}`           | Unidade do produto             |
+| `{{quantidade}}`        | Quantidade em KG               |
+| `{{valor_unitario}}`    | Valor unitário por KG          |
+| `{{valor_total}}`       | Valor total da nota            |
+| `{{natureza_operacao}}` | Natureza da operação do modelo |
+
+### Transporte
+
+| Variável              | Descrição                                   |
+| --------------------- | ------------------------------------------- |
+| `{{placa_cavalo}}`    | Placa do veículo/cavalo, quando informada   |
+| `{{motorista_nome}}`  | Nome do motorista, quando informado         |
+| `{{motorista_cpf}}`   | CPF do motorista, quando informado          |
+| `{{nf_referenciada}}` | Número da NF referenciada, quando aplicável |
+
+### CNDs e retenções
+
+| Variável                                   | Descrição                                           |
+| ------------------------------------------ | --------------------------------------------------- |
+| `{{cnd_cooperativa_numero}}`               | Número da CND da cooperativa                        |
+| `{{cnd_cooperativa_codigo_autenticacao}}`  | Código de autenticação da CND da cooperativa        |
+| `{{cnd_cooperativa_vencimento}}`           | Vencimento da CND da cooperativa                    |
+| `{{cnd_produtor_numero}}`                  | Número da CND do produtor                           |
+| `{{cnd_produtor_codigo_autenticacao}}`     | Código de autenticação da CND do produtor           |
+| `{{cnd_produtor_vencimento}}`              | Vencimento da CND do produtor                       |
+| `{{cnd_destinatario_numero}}`              | Número da CND do destinatário final                 |
+| `{{cnd_destinatario_codigo_autenticacao}}` | Código de autenticação da CND do destinatário final |
+| `{{cnd_destinatario_vencimento}}`          | Vencimento da CND do destinatário final             |
+| `{{funrural_valor}}`                       | Valor do Funrural                                   |
+| `{{funrural_base}}`                        | Base de cálculo do Funrural                         |
+| `{{retencao_valor}}`                       | Valor de retenção, quando aplicável                 |
+| `{{retencao_base}}`                        | Base de retenção, quando aplicável                  |
+
+---
+
+# Modelo 5118
+
+## Regra funcional
+
+O modelo 5118 representa a nota orientativa do produtor/agricultor para a cooperativa.
+
+## Operação esperada
+
+| Campo                     | Regra                                                                                                          |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Emitente                  | Produtor/agricultor                                                                                            |
+| Destinatário              | Cooperativa                                                                                                    |
+| CFOP                      | 5118                                                                                                           |
+| CST ICMS                  | 51                                                                                                             |
+| Produto                   | Produto vindo do GRL019/cadastro                                                                               |
+| NCM                       | Cadastro do produto                                                                                            |
+| Unidade                   | KG                                                                                                             |
+| Quantidade padrão exemplo | 30.000 KG                                                                                                      |
+| Valor unitário            | Preço da saca dividido por 60                                                                                  |
+| Valor total               | Quantidade KG × valor unitário                                                                                 |
+| Natureza da operação      | Venda de produção do estabelecimento entregue ao destinatário por conta e ordem do adquirente em venda à ordem |
+
+## Comportamento esperado no sistema
+
+* O destinatário deve ser a cooperativa cadastrada.
+* O emitente deve ser o produtor da linha de recebimento do GRL019.
+* O CST deve vir da parametrização do modelo 5118.
+* O CST 51 não deve ser inferido de forma fixa pelo produto se o modelo possuir CST próprio.
+* O modelo 5118 pode ser gerado sozinho.
+* Se o tipo de contrato estiver parametrizado como operação casada, o sistema deve oferecer:
+
+  * gerar apenas 5118;
+  * gerar 5118 + 5923;
+  * cancelar.
+* A linha de expedição vinculada pode ser usada para identificar destinatário/local final nos dados adicionais.
+* A linha de expedição vinculada não deve virar uma nota da cooperativa.
+
+## Template recomendado de dados adicionais
+
+```txt
+Inf. Contribuinte: ICMS DIFERIDO - ARTIGOS 573 A 586 - CONFORME ART. 6, DO ANEXO VII AO RICMS/MT/2024.
+PROCON MT FONE 151 AV. HISTORIADOR RUBENS DE MENDONCA (AV. DO CPA), 917 BAIRRO ARAES EDIFICIO ELDORADO EXECUTIVE CENTER (AO LADO DA POLICIA FEDERAL) CEP 78008-000 FONE 151 - CUIABA MT.
+
+CONFIRMAÇÃO DE NEGÓCIO {{confirmacao_negocio}} CONTRATO {{contrato_cliente}}
+
+Mercadoria será entregue na {{destinatario_final_nome}}, CNPJ: {{destinatario_final_cnpj}}, I.E: {{destinatario_final_ie}}, ENDEREÇO: {{destinatario_final_endereco_completo}}.
+
+FUNRURAL 1,5: {{funrural_valor}} Base: {{funrural_base}}
+PLACA CAVALO: {{placa_cavalo}}
+
+{{cooperativa_razao_social}} CND NUM: {{cnd_cooperativa_numero}} COD.AUT: {{cnd_cooperativa_codigo_autenticacao}} VENCIMENTO: {{cnd_cooperativa_vencimento}}
+
+PRODUTOR: CND NUM: {{cnd_produtor_numero}} COD.AUT: {{cnd_produtor_codigo_autenticacao}} VENCIMENTO: {{cnd_produtor_vencimento}}
+```
+
+## Placeholders esperados quando não houver dado automático
+
+| Campo                  | Placeholder sugerido |
+| ---------------------- | -------------------- |
+| Funrural valor         | `R$ ##,##`           |
+| Funrural base          | `R$ ##.###,##`       |
+| Placa cavalo           | `########`           |
+| CND número             | `###########`        |
+| Código de autenticação | `##########`         |
+| Vencimento             | `##/##/####`         |
+
+## Critérios de aceite do 5118
+
+* [ ] Emitente é o produtor/agricultor.
+* [ ] Destinatário é a cooperativa.
+* [ ] CFOP é 5118.
+* [ ] CST ICMS é 51 por parametrização do modelo.
+* [ ] Natureza da operação corresponde à operação de venda por conta e ordem.
+* [ ] Quantidade padrão inicial pode ser 30.000 KG.
+* [ ] Valor unitário é calculado por preço da saca dividido por 60.
+* [ ] Valor total é calculado por quantidade KG × valor unitário.
+* [ ] Dados adicionais exibem confirmação de negócio.
+* [ ] Dados adicionais exibem contrato cliente quando existir.
+* [ ] Dados adicionais exibem local de entrega final.
+* [ ] Dados adicionais exibem placeholders de Funrural/base.
+* [ ] Dados adicionais exibem placeholders de placa cavalo.
+* [ ] Dados adicionais exibem CND da cooperativa.
+* [ ] Dados adicionais exibem CND do produtor.
+* [ ] Se houver operação casada, o sistema oferece gerar 5118 ou 5118 + 5923.
+
+---
+
+# Modelo 5923
+
+## Regra funcional
+
+O modelo 5923 representa a nota orientativa do produtor/agricultor para o armazém/destinatário final.
+
+Este modelo é usado na operação casada com o 5118.
+
+## Operação esperada
+
+| Campo                     | Regra                                                                  |
+| ------------------------- | ---------------------------------------------------------------------- |
+| Emitente                  | Produtor/agricultor                                                    |
+| Destinatário              | Armazém/destinatário final                                             |
+| CFOP                      | 5923                                                                   |
+| CST ICMS                  | 41                                                                     |
+| Produto                   | Produto vindo do GRL019/cadastro                                       |
+| NCM                       | Cadastro do produto                                                    |
+| Unidade                   | KG                                                                     |
+| Quantidade padrão exemplo | 30.000 KG                                                              |
+| Valor unitário            | Preço da saca dividido por 60                                          |
+| Valor total               | Quantidade KG × valor unitário                                         |
+| Natureza da operação      | Remessa de mercadoria por conta e ordem de terceiros, em venda à ordem |
+
+## Comportamento esperado no sistema
+
+* O destinatário deve ser o armazém/destinatário final.
+* O destinatário final deve vir preferencialmente do cadastro de armazém/destinatário.
+* A base para localizar esse destinatário é a linha de expedição vinculada no GRL019.
+* Se o cadastro de armazém/destinatário não existir, o sistema pode usar os dados da linha de expedição como fallback, mas deve alertar o usuário para validar.
+* O emitente deve continuar sendo o produtor/agricultor da linha de recebimento.
+* A linha de expedição vinculada não deve virar nota emitida pela cooperativa.
+* A CST 41 deve ser aplicada ao modelo 5923, não ao produto de forma global.
+* O modelo 5923 normalmente acompanha o 5118 em operação casada.
+* A geração direta por linha de expedição vinculada deve continuar bloqueada/orientada.
+
+## Template recomendado de dados adicionais
+
+```txt
+Inf. Contribuinte: ICMS NÃO TRIBUTADO - CST 041. MOTORISTA: {{motorista_nome}}.
+PROCON MT AV HISTORIADOR RUBENS MENDONCA, 917, ED. ELDORADO EXECUTIVE CENTER, CUIABA - MT.
+
+CONFIRMAÇÃO DE NEGÓCIO {{confirmacao_negocio}} CONTRATO {{contrato_cliente}}
+
+REF. NFE Nº {{nf_referenciada}} (NOTA CFOP 5118/5120)
+
+{{cooperativa_razao_social}}, CNPJ: {{cooperativa_cnpj}}, IE: {{cooperativa_ie}}, {{cooperativa_endereco}}, {{cooperativa_bairro}}, CEP: {{cooperativa_cep}}, {{cooperativa_telefone}}, {{cooperativa_municipio}} {{cooperativa_uf}}.
+
+PLACA CAVALO: {{placa_cavalo}}
+
+{{destinatario_final_nome}} CND NUM: {{cnd_destinatario_numero}} COD.AUT: {{cnd_destinatario_codigo_autenticacao}} VENCIMENTO: {{cnd_destinatario_vencimento}}
+
+PRODUTOR: CND NUM: {{cnd_produtor_numero}} COD.AUT: {{cnd_produtor_codigo_autenticacao}} VENCIMENTO: {{cnd_produtor_vencimento}}
+```
+
+## Placeholders esperados quando não houver dado automático
+
+| Campo                  | Placeholder sugerido    |
+| ---------------------- | ----------------------- |
+| Motorista              | `O MESMO` ou `########` |
+| NF referenciada        | `#####`                 |
+| Placa cavalo           | `########`              |
+| CND número             | `###########`           |
+| Código de autenticação | `##########`            |
+| Vencimento             | `##/##/####`            |
+
+## Critérios de aceite do 5923
+
+* [ ] Emitente é o produtor/agricultor.
+* [ ] Destinatário é o armazém/destinatário final.
+* [ ] CFOP é 5923.
+* [ ] CST ICMS é 41 por parametrização do modelo.
+* [ ] CST 41 não contamina os modelos 5118 e 5132.
+* [ ] Natureza da operação corresponde à remessa por conta e ordem de terceiros em venda à ordem.
+* [ ] Quantidade padrão inicial pode ser 30.000 KG.
+* [ ] Valor unitário é calculado por preço da saca dividido por 60.
+* [ ] Valor total é calculado por quantidade KG × valor unitário.
+* [ ] Dados adicionais exibem ICMS não tributado/CST 041.
+* [ ] Dados adicionais exibem motorista ou placeholder equivalente.
+* [ ] Dados adicionais exibem confirmação de negócio.
+* [ ] Dados adicionais exibem contrato cliente quando existir.
+* [ ] Dados adicionais exibem referência à NF 5118/5120.
+* [ ] Dados adicionais exibem dados completos da cooperativa.
+* [ ] Dados adicionais exibem placa cavalo.
+* [ ] Dados adicionais exibem CND do destinatário final.
+* [ ] Dados adicionais exibem CND do produtor.
+* [ ] Linha de expedição vinculada é usada apenas como fonte de destinatário/local.
+* [ ] Geração direta por expedição vinculada continua bloqueada/orientada.
+
+---
+
+# Modelo 5132
+
+## Regra funcional
+
+O modelo 5132 representa a nota orientativa do produtor/agricultor para a cooperativa.
+
+Este modelo deve ser emitido sozinho.
+
+Mesmo quando houver informação de destinatário/local final, isso deve aparecer apenas nos dados adicionais, sem acionar geração automática do 5923.
+
+## Operação esperada
+
+| Campo                | Regra                                           |
+| -------------------- | ----------------------------------------------- |
+| Emitente             | Produtor/agricultor                             |
+| Destinatário         | Cooperativa                                     |
+| CFOP                 | 5132                                            |
+| CST ICMS             | 51                                              |
+| Produto              | Produto vindo do GRL019/cadastro                |
+| NCM                  | Cadastro do produto                             |
+| Unidade              | KG                                              |
+| Quantidade exemplo   | 600.000 KG                                      |
+| Valor unitário       | Preço da saca dividido por 60                   |
+| Valor total          | Quantidade KG × valor unitário                  |
+| Natureza da operação | Fixação de preço de produção do estabelecimento |
+
+## Comportamento esperado no sistema
+
+* O destinatário deve ser a cooperativa cadastrada.
+* O emitente deve ser o produtor/agricultor.
+* O modelo 5132 deve ser gerado sozinho.
+* O modelo 5132 não deve gerar 5923 automaticamente.
+* O CST deve ser 51 por parametrização do modelo.
+* O sistema deve preservar contratos com zeros à esquerda quando o dado vier corretamente do GRL019.
+* O contrato deve ser tratado como texto, não como número.
+* A quantidade inicial não deve ficar obrigatoriamente presa em 30.000 KG.
+* O modelo deve permitir quantidade diferente, como 600.000 KG.
+* Idealmente, a quantidade padrão deve ser parametrizável por modelo.
+* Os dados adicionais podem informar entrega em destinatário/local final, como indústria/armazém, sem transformar isso em operação casada.
+
+## Template recomendado de dados adicionais
+
+```txt
+Inf. Contribuinte: ICMS DIFERIDO - ARTIGOS 573 A 586 - CONFORME ART. 6, DO ANEXO VII AO RICMS/MT/2024.
+PROCON MT FONE 151 AV. HISTORIADOR RUBENS DE MENDONCA (AV. DO CPA), 917 BAIRRO ARAES EDIFICIO ELDORADO EXECUTIVE CENTER (AO LADO DA POLICIA FEDERAL) CEP 78008-000 FONE 151 - CUIABA MT.
+
+CONFIRMAÇÃO DE NEGÓCIO: {{confirmacao_negocio}} CONTRATO: {{contrato}}
+
+Mercadoria será entregue na {{destinatario_final_nome}}, CNPJ: {{destinatario_final_cnpj}}, I.E: {{destinatario_final_ie}}, LOCALIZADA NA {{destinatario_final_endereco_completo}}.
+
+Valor: {{retencao_valor}} Base: {{retencao_base}}
+PLACA CAVALO: {{placa_cavalo}}
+
+{{cooperativa_razao_social}} CND NUM: {{cnd_cooperativa_numero}} COD.AUT: {{cnd_cooperativa_codigo_autenticacao}} VENCIMENTO: {{cnd_cooperativa_vencimento}}
+
+PRODUTOR: CND NUM: {{cnd_produtor_numero}} COD.AUT: {{cnd_produtor_codigo_autenticacao}} VENCIMENTO: {{cnd_produtor_vencimento}}
+```
+
+## Placeholders esperados quando não houver dado automático
+
+| Campo                  | Placeholder sugerido |
+| ---------------------- | -------------------- |
+| Valor/retenção         | `R$ ##,##`           |
+| Base                   | `R$ ##.###,##`       |
+| Placa cavalo           | `########`           |
+| CND número             | `###########`        |
+| Código de autenticação | `##########`         |
+| Vencimento             | `##/##/####`         |
+
+## Critérios de aceite do 5132
+
+* [ ] Emitente é o produtor/agricultor.
+* [ ] Destinatário é a cooperativa.
+* [ ] CFOP é 5132.
+* [ ] CST ICMS é 51 por parametrização do modelo.
+* [ ] Natureza da operação corresponde à fixação de preço de produção do estabelecimento.
+* [ ] O modelo 5132 é emitido sozinho.
+* [ ] O modelo 5132 não gera 5923 automaticamente.
+* [ ] Quantidade diferente de 30.000 KG pode ser informada sem limitação.
+* [ ] O modelo permite quantidade exemplo de 600.000 KG.
+* [ ] Contrato com zeros à esquerda é preservado quando importado corretamente.
+* [ ] Dados adicionais podem informar destinatário/local final sem gerar operação casada.
+* [ ] Dados adicionais exibem ICMS diferido.
+* [ ] Dados adicionais exibem PROCON MT.
+* [ ] Dados adicionais exibem confirmação de negócio.
+* [ ] Dados adicionais exibem contrato preservado como texto.
+* [ ] Dados adicionais exibem entrega final.
+* [ ] Dados adicionais exibem valor/base ou placeholders equivalentes.
+* [ ] Dados adicionais exibem placa cavalo.
+* [ ] Dados adicionais exibem CND da cooperativa.
+* [ ] Dados adicionais exibem CND do produtor.
+
+---
+
+# Diferenças importantes entre os modelos
+
+## 5118 x 5923
+
+| Ponto                  | 5118                               | 5923                                  |
+| ---------------------- | ---------------------------------- | ------------------------------------- |
+| Destinatário           | Cooperativa                        | Destinatário final/armazém            |
+| CST exemplo            | 51                                 | 41                                    |
+| Operação               | Venda por conta e ordem            | Remessa por conta e ordem             |
+| Usa contrato vinculado | Sim, quando operação casada        | Sim, como fonte do destinatário final |
+| Pode gerar sozinho     | Sim                                | Normalmente não, acompanha 5118       |
+| Dados da cooperativa   | Como destinatária e/ou CND         | Dentro dos dados adicionais           |
+| NF referenciada        | Não obrigatória no template antigo | Sim, referência à NF 5118/5120        |
+
+## 5132 x operação casada
+
+| Ponto                                             | Regra                                        |
+| ------------------------------------------------- | -------------------------------------------- |
+| 5132 gera 5923?                                   | Não                                          |
+| 5132 usa destinatário final nos dados adicionais? | Pode usar                                    |
+| Destinatário principal do 5132                    | Cooperativa                                  |
+| CST exemplo                                       | 51                                           |
+| Quantidade exemplo                                | 600.000 KG                                   |
+| Contrato com zeros à esquerda                     | Deve preservar quando importado corretamente |
+
+---
+
+# Validações esperadas antes de gerar PDF
+
+O sistema deve alertar ou exigir confirmação quando houver:
+
+* GRL019 ausente.
+* Cooperativa não cadastrada.
+* Tipo de contrato não parametrizado.
+* Modelo de nota não cadastrado.
+* Produto sem NCM.
+* Modelo/produto sem CST.
+* Contrato vinculado ausente quando exigido.
+* Destinatário final/armazém não localizado quando necessário.
+* Contrato com suspeita de descaracterização de zeros à esquerda.
+* Dados adicionais com placeholders pendentes.
+* Quantidade menor ou igual a zero.
+* Valor unitário menor ou igual a zero.
+* Valor total menor ou igual a zero.
+
+Para placeholders pendentes, o sistema não deve gerar PDF silenciosamente. O usuário deve revisar ou confirmar conscientemente.
+
+---
+
+# Regras de cálculo
+
+## Valor unitário
+
+```txt
+valor_unitario_kg = preco_saca / 60
+```
+
+## Valor total
+
+```txt
+valor_total = quantidade_kg * valor_unitario_kg
+```
+
+## Quantidade
+
+* A quantidade padrão pode iniciar em 30.000 KG.
+* A quantidade deve ser editável na prévia.
+* O modelo 5132 deve permitir quantidades maiores, como 600.000 KG.
+* Se existir quantidade padrão por modelo, o sistema deve usá-la apenas como sugestão inicial.
+* O usuário deve poder alterar a quantidade antes do PDF.
+
+---
+
+# Regras de contrato
+
+* Contrato deve ser tratado como texto.
+* Contrato vinculado deve ser tratado como texto.
+* Contratos com zeros à esquerda devem ser preservados quando importados corretamente.
+* O sistema não deve inventar zeros à esquerda sem fonte confiável.
+* Se houver suspeita de perda de zeros à esquerda, o sistema deve alertar o usuário.
+* O vínculo oficial entre contratos deve usar a coluna `CONTRATO VINCULADO`.
+* Não usar regra de contrato menor/maior como regra oficial.
+
+---
+
+# Regras de destinatário
+
+## Quando o modelo indicar cooperativa
+
+O destinatário principal da nota deve ser a cooperativa cadastrada.
+
+Aplicável, por padrão, a:
+
+* 5118
+* 5132
+
+## Quando o modelo indicar armazém/destinatário final
+
+O destinatário principal da nota deve ser o armazém/destinatário final.
+
+Aplicável, por padrão, a:
+
+* 5923
+
+## Observação técnica
+
+O sistema deve respeitar `modelo.tipo_destinatario`.
+
+O fallback por CFOP pode existir apenas para compatibilidade com dados antigos:
+
+* CFOP 5923 → armazém/destinatário final.
+* CFOP 5118 ou 5132 → cooperativa.
+
+---
+
+# Regras de CST
+
+* CST não deve ser apenas global por produto.
+* O mesmo produto pode ter CST diferente conforme o modelo.
+* Exemplo:
+
+  * 5118: CST 51.
+  * 5923: CST 41.
+  * 5132: CST 51.
+* O sistema deve priorizar CST parametrizada no modelo.
+* A CST do produto pode ser usada apenas como fallback.
+* O sistema deve alertar se não houver CST nem no modelo nem no produto.
+
+---
+
+# Regras de PDF
+
+O PDF orientativo deve exibir:
+
+* Nome do modelo.
+* CFOP.
+* Natureza da operação.
+* Emitente.
+* Destinatário.
+* Produto.
+* NCM.
+* CST.
+* Unidade.
+* Quantidade.
+* Valor unitário.
+* Valor total.
+* Frete.
+* Transportador, quando informado.
+* Dados adicionais.
+* Observação de que o documento é apenas orientativo.
+
+Texto obrigatório recomendado:
+
+```txt
+Este documento é um modelo orientativo para emissão da Nota Fiscal pelo produtor rural. Não possui validade fiscal como NF-e.
+```
+
+Rodapé recomendado:
+
+```txt
+Gerado por JM Assessoria e Contabilidade MT.
+```
+
+Os dados adicionais devem quebrar linha corretamente e não devem estourar visualmente no PDF.
+
+---
+
+# Checklist geral de substituição do Excel antigo
+
+* [ ] O sistema importa o GRL019 corretamente.
+* [ ] O sistema preserva contrato como texto.
+* [ ] O sistema preserva contrato vinculado como texto.
+* [ ] O sistema localiza vínculo pela coluna `CONTRATO VINCULADO`.
+* [ ] O sistema identifica cooperativa pelo GRL019.
+* [ ] O sistema usa cadastro de cooperativa.
+* [ ] O sistema usa cadastro de produto.
+* [ ] O sistema usa cadastro de armazém/destinatário final.
+* [ ] O sistema usa tipo de contrato por cooperativa.
+* [ ] O sistema usa modelo de nota por CFOP.
+* [ ] O sistema respeita `tipo_destinatario`.
+* [ ] O sistema usa CST por modelo.
+* [ ] O sistema usa natureza da operação por modelo.
+* [ ] O sistema usa dados adicionais parametrizados por modelo.
+* [ ] O sistema exibe variáveis disponíveis para o usuário montar templates.
+* [ ] O sistema alerta placeholders pendentes antes de gerar PDF.
+* [ ] O sistema permite editar quantidade.
+* [ ] O sistema permite editar valor unitário.
+* [ ] O sistema recalcula valor total.
+* [ ] O sistema gera 5118 corretamente.
+* [ ] O sistema gera 5923 corretamente em operação casada.
+* [ ] O sistema gera 5132 sozinho.
+* [ ] O sistema não transforma linha de expedição em nota da cooperativa.
+* [ ] O PDF gerado é legível e orientativo.
+* [ ] O PDF não possui validade fiscal como NF-e.
