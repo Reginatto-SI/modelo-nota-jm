@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildNota, buildNotaPdfFileName, syncPlacaCavaloPlaceholder } from "./nota";
 import { TIPO_FRETE_DEFAULT } from "./tipoFrete";
+import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "./numberFormat";
 import type { Cooperativa, Grl019Row, ModeloNota, Produto } from "./types";
 import type { ResolveResult } from "./resolve";
 
@@ -66,6 +67,8 @@ const modeloBase: ModeloNota = {
   tipo_frete_padrao: null,
   cst_icms_padrao: null,
   quantidade_padrao: null,
+  valor_unitario_padrao: null,
+  valor_total_padrao: null,
   dados_adicionais_template: null,
   ativo: true,
   created_at: "",
@@ -91,6 +94,49 @@ function resolveResult(): ResolveResult {
 }
 
 describe("buildNota", () => {
+
+  it("mantém o fallback financeiro atual do GRL019 quando o modelo não tem valores padrão", () => {
+    const nota = buildNota(resolveResult(), "5118", modeloBase);
+
+    expect(nota.quantidade).toBe(30000);
+    expect(nota.valorUnitario).toBe(2);
+    expect(nota.valorTotal).toBe(60000);
+  });
+
+  it("usa valor unitário padrão para sugerir o total inicial", () => {
+    const nota = buildNota(resolveResult(), "5118", {
+      ...modeloBase,
+      quantidade_padrao: 30000,
+      valor_unitario_padrao: 0.7,
+    });
+
+    expect(nota.valorUnitario).toBe(0.7);
+    expect(nota.valorTotal).toBe(21000);
+  });
+
+  it("usa valor total padrão para recalcular o unitário inicial", () => {
+    const nota = buildNota(resolveResult(), "5118", {
+      ...modeloBase,
+      quantidade_padrao: 30000,
+      valor_total_padrao: 22500,
+    });
+
+    expect(nota.valorTotal).toBe(22500);
+    expect(nota.valorUnitario).toBe(0.75);
+  });
+
+  it("prioriza valor total padrão quando total e unitário forem informados", () => {
+    const nota = buildNota(resolveResult(), "5118", {
+      ...modeloBase,
+      quantidade_padrao: 30000,
+      valor_unitario_padrao: 0.7,
+      valor_total_padrao: 22500,
+    });
+
+    expect(nota.valorTotal).toBe(22500);
+    expect(nota.valorUnitario).toBe(0.75);
+  });
+
   it("usa o tipo de frete padrão configurado no modelo", () => {
     const nota = buildNota(resolveResult(), "5118", {
       ...modeloBase,
@@ -337,4 +383,19 @@ describe("buildNota", () => {
     expect(syncPlacaCavaloPlaceholder(texto, "XYZ9Z99")).toBe("CND NUM: 123");
   });
 
+});
+
+
+describe("formatadores de valores brasileiros", () => {
+  it("interpreta decimais e moeda em formato brasileiro", () => {
+    expect(parseDecimalBR("0,70")).toBe(0.7);
+    expect(parseDecimalBR("1,25")).toBe(1.25);
+    expect(parseCurrencyBR("R$ 22.500,00")).toBe(22500);
+  });
+
+  it("mantém duas casas visuais para valor unitário e moeda", () => {
+    expect(formatUnitValueBR(0.7)).toBe("0,70");
+    expect(formatUnitValueBR(0.6583333333333333)).toBe("0,65833333");
+    expect(formatCurrencyBR(21000)).toBe("R$ 21.000,00");
+  });
 });

@@ -14,6 +14,7 @@ import { buildNotaPdfFileName, getPendingPlaceholders, syncPlacaCavaloPlaceholde
 import { generatePdf } from "@/lib/pdf";
 import { TIPO_FRETE_OPTIONS, normalizeTipoFrete } from "@/lib/tipoFrete";
 import { toast } from "sonner";
+import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "@/lib/numberFormat";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,10 +34,11 @@ export default function Preview() {
     (state?.notas ?? []).map((nota) => ({ ...nota, tpFrete: normalizeTipoFrete(nota.tpFrete) })),
   );
   const [confirmPlaceholdersOpen, setConfirmPlaceholdersOpen] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   if (!state || notas.length === 0) return <Navigate to="/pesquisa" replace />;
 
-  const update = (idx: number, patch: Partial<Nota>) => {
+  const update = (idx: number, patch: Partial<Nota>, recalc: "unitario" | "total" = "unitario") => {
     setNotas((prev) => prev.map((n, i) => {
       if (i !== idx) return n;
       const merged = { ...n, ...patch };
@@ -44,9 +46,25 @@ export default function Preview() {
         // Sincroniza apenas o placeholder imediato da placa; nunca substitui o restante da linha.
         merged.dadosAdicionais = syncPlacaCavaloPlaceholder(merged.dadosAdicionais, patch.placaVeiculo);
       }
-      merged.valorTotal = merged.quantidade * merged.valorUnitario;
+      if (recalc === "total") {
+        if (merged.quantidade > 0) merged.valorUnitario = merged.valorTotal / merged.quantidade;
+      } else {
+        merged.valorTotal = merged.quantidade * merged.valorUnitario;
+      }
       return merged;
     }));
+  };
+
+  const setDraft = (idx: number, field: "valorUnitario" | "valorTotal", value: string) => {
+    setDrafts((prev) => ({ ...prev, [`${idx}.${field}`]: value }));
+  };
+
+  const clearDraft = (idx: number, field: "valorUnitario" | "valorTotal") => {
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[`${idx}.${field}`];
+      return next;
+    });
   };
 
   const pendenciasPlaceholders = notas.flatMap((nota) =>
@@ -112,11 +130,33 @@ export default function Preview() {
                   <F label="Data saída" type="date" value={n.dataSaida} onChange={(v) => update(i, { dataSaida: v })} />
                   <F label="Hora saída" value={n.horaSaida} onChange={(v) => update(i, { horaSaida: v })} />
                   <F label="Quantidade (KG)" type="number" value={String(n.quantidade)} onChange={(v) => update(i, { quantidade: Number(v) })} />
-                  <F label="Valor unitário (R$/KG)" type="number" value={String(n.valorUnitario)} onChange={(v) => update(i, { valorUnitario: Number(v) })} />
-                  <div className="space-y-1.5">
-                    <Label>Valor total</Label>
-                    <Input readOnly value={n.valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} />
-                  </div>
+                  <MoneyField
+                    label="Valor unitário (R$/KG)"
+                    placeholder="Ex.: 0,70"
+                    value={drafts[`${i}.valorUnitario`] ?? formatUnitValueBR(n.valorUnitario)}
+                    onChange={(v) => {
+                      setDraft(i, "valorUnitario", v);
+                      const parsed = parseDecimalBR(v);
+                      if (parsed != null) update(i, { valorUnitario: parsed });
+                    }}
+                    onBlur={() => clearDraft(i, "valorUnitario")}
+                  />
+                  <MoneyField
+                    label="Valor total"
+                    placeholder="Ex.: R$ 22.500,00"
+                    value={drafts[`${i}.valorTotal`] ?? formatCurrencyBR(n.valorTotal)}
+                    onChange={(v) => {
+                      setDraft(i, "valorTotal", v);
+                      const parsed = parseCurrencyBR(v);
+                      if (parsed == null) return;
+                      if (n.quantidade <= 0) {
+                        toast.error("Informe uma quantidade maior que zero para calcular o valor unitário.");
+                        return;
+                      }
+                      update(i, { valorTotal: parsed }, "total");
+                    }}
+                    onBlur={() => clearDraft(i, "valorTotal")}
+                  />
                   <TipoFreteSelect value={n.tpFrete} onChange={(v) => update(i, { tpFrete: v })} />
                   <F label="Placa do veículo" value={n.placaVeiculo} onChange={(v) => update(i, { placaVeiculo: v })} />
                   <F label="Transportador" value={n.transportador} onChange={(v) => update(i, { transportador: v })} />
@@ -200,6 +240,27 @@ function TipoFreteSelect({ value, onChange }: { value: string; onChange: (v: str
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+function MoneyField({
+  label,
+  value,
+  placeholder,
+  onChange,
+  onBlur,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (v: string) => void;
+  onBlur: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <Input inputMode="decimal" placeholder={placeholder} value={value} onBlur={onBlur} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

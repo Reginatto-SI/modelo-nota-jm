@@ -62,6 +62,8 @@ export interface ModeloNota {
   tipo_frete_padrao: string | null;
   cst_icms_padrao: string | null;
   quantidade_padrao: number | null;
+  valor_unitario_padrao: number | null;
+  valor_total_padrao: number | null;
   dados_adicionais_template: string | null;
   ativo: boolean;
   created_at: string;

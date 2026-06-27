@@ -172,7 +172,10 @@ export type Database = {
           id: string
           natureza_operacao: string | null
           nome_modelo: string
+          quantidade_padrao: number | null
           tipo_destinatario: string
+          valor_total_padrao: number | null
+          valor_unitario_padrao: number | null
           tipo_frete_padrao: string | null
           updated_at: string
         }
@@ -186,7 +189,10 @@ export type Database = {
           id?: string
           natureza_operacao?: string | null
           nome_modelo: string
+          quantidade_padrao?: number | null
           tipo_destinatario?: string
+          valor_total_padrao?: number | null
+          valor_unitario_padrao?: number | null
           tipo_frete_padrao?: string | null
           updated_at?: string
         }
@@ -200,7 +206,10 @@ export type Database = {
           id?: string
           natureza_operacao?: string | null
           nome_modelo?: string
+          quantidade_padrao?: number | null
           tipo_destinatario?: string
+          valor_total_padrao?: number | null
+          valor_unitario_padrao?: number | null
           tipo_frete_padrao?: string | null
           updated_at?: string
         }

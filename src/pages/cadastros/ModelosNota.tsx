@@ -47,6 +47,7 @@ import { useModelos, useSaveModelo, useDeleteModelo, useCooperativas } from "@/l
 import { TIPO_FRETE_DEFAULT, TIPO_FRETE_OPTIONS } from "@/lib/tipoFrete";
 import { TEMPLATE_VARIABLE_GROUPS } from "@/lib/nota";
 import type { ModeloNota } from "@/lib/types";
+import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "@/lib/numberFormat";
 
 const TEMPLATE_EXEMPLO =
   "Contrato: {{contrato}} / Vinculado: {{contrato_vinculado}} / Cliente: {{contrato_cliente}}\nProdutor: {{produtor_nome}} - CPF/CNPJ: {{produtor_cpf_cnpj}}\nProduto: {{produto}} - NCM: {{ncm}}\nQtd: {{quantidade}} KG x R$ {{valor_unitario}} = R$ {{valor_total}}\nPLACA CAVALO: {{placa_cavalo}}\nCND PRODUTOR NUM: {{cnd_produtor_numero}} COD.AUT: {{cnd_produtor_codigo_autenticacao}} VENC: {{cnd_produtor_vencimento}}";
@@ -57,6 +58,11 @@ const VARIAVEIS_DISPONIVEIS = TEMPLATE_VARIABLE_GROUPS;
 
 type ModeloForm = Partial<ModeloNota> & { cooperativa_ids?: string[] };
 
+const nullableDecimal = (value: string, parser = parseDecimalBR) => {
+  const parsed = parser(value);
+  return parsed != null && parsed > 0 ? parsed : null;
+};
+
 const EMPTY: ModeloForm = {
   ativo: true,
   tipo_destinatario: "cooperativa",
@@ -64,6 +70,8 @@ const EMPTY: ModeloForm = {
   tipo_frete_padrao: TIPO_FRETE_DEFAULT,
   cst_icms_padrao: "",
   quantidade_padrao: null,
+  valor_unitario_padrao: null,
+  valor_total_padrao: null,
   dados_adicionais_template: TEMPLATE_EXEMPLO,
   cooperativa_ids: [],
 };
@@ -79,6 +87,7 @@ export default function ModelosNota() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("dados");
   const [form, setForm] = useState<ModeloForm>(EMPTY);
+  const [financeDraft, setFinanceDraft] = useState({ quantidade: "", valorUnitario: "", valorTotal: "" });
   const [q, setQ] = useState("");
   const [delId, setDelId] = useState<string | null>(null);
 
@@ -95,11 +104,17 @@ export default function ModelosNota() {
 
   const openNew = () => {
     setForm({ ...EMPTY });
+    setFinanceDraft({ quantidade: "", valorUnitario: "", valorTotal: "" });
     setTab("dados");
     setOpen(true);
   };
   const openEdit = (row: ModeloNota) => {
     setForm({ ...row, cooperativa_ids: row.cooperativa_ids ?? [] });
+    setFinanceDraft({
+      quantidade: row.quantidade_padrao == null ? "" : String(row.quantidade_padrao),
+      valorUnitario: row.valor_unitario_padrao == null ? "" : formatUnitValueBR(row.valor_unitario_padrao),
+      valorTotal: row.valor_total_padrao == null ? "" : formatCurrencyBR(row.valor_total_padrao),
+    });
     setTab("dados");
     setOpen(true);
   };
@@ -226,14 +241,15 @@ export default function ModelosNota() {
 
         {/* Modal modernizado em abas: Dados, Cooperativas liberadas e Dados adicionais. */}
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
             <DialogHeader>
               <DialogTitle>{form.id ? "Editar" : "Novo"} — Modelo de Nota</DialogTitle>
             </DialogHeader>
 
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="dados">Dados do Modelo</TabsTrigger>
+                <TabsTrigger value="financeiros">Dados financeiros</TabsTrigger>
                 <TabsTrigger value="cooperativas">
                   Cooperativas{selecionadas.length > 0 ? ` (${selecionadas.length})` : ""}
                 </TabsTrigger>
@@ -323,26 +339,84 @@ export default function ModelosNota() {
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>Quantidade padrão (KG)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={String(form.quantidade_padrao ?? "")}
-                    onChange={(e) => set("quantidade_padrao", e.target.value ? Number(e.target.value) : null)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Valor inicial da prévia; se vazio, usa 30.000 KG.
-                  </p>
-                </div>
-
                 <div className="flex items-center justify-between rounded-md border p-3">
                   <Label>Ativo</Label>
                   <Switch checked={Boolean(form.ativo)} onCheckedChange={(c) => set("ativo", c)} />
                 </div>
               </TabsContent>
 
-              {/* Aba 2 — Cooperativas liberadas */}
+
+              {/* Aba 2 — Dados financeiros */}
+              <TabsContent value="financeiros" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground sm:col-span-2">
+                  <p className="font-medium text-foreground">Prioridade dos valores iniciais da prévia</p>
+                  <p>Se o Valor total padrão for preenchido, ele tem prioridade e o sistema recalcula o valor unitário pela quantidade.</p>
+                  <p>Se o Valor total padrão estiver vazio, mas o Valor unitário padrão estiver preenchido, o sistema calcula o total.</p>
+                  <p>Se ambos estiverem vazios, o sistema usa o preço da saca do GRL019 dividido por 60.</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Quantidade padrão (KG)</Label>
+                  <Input
+                    inputMode="decimal"
+                    placeholder="Ex.: 30000"
+                    value={financeDraft.quantidade}
+                    onChange={(e) => {
+                      setFinanceDraft((draft) => ({ ...draft, quantidade: e.target.value }));
+                      set("quantidade_padrao", nullableDecimal(e.target.value));
+                    }}
+                    onBlur={() => setFinanceDraft((draft) => ({
+                      ...draft,
+                      quantidade: form.quantidade_padrao == null ? "" : String(form.quantidade_padrao),
+                    }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Valor inicial da prévia; se vazio, usa 30.000 KG.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Valor unitário padrão (R$/KG)</Label>
+                  <Input
+                    inputMode="decimal"
+                    placeholder="Ex.: 0,70"
+                    value={financeDraft.valorUnitario}
+                    onChange={(e) => {
+                      setFinanceDraft((draft) => ({ ...draft, valorUnitario: e.target.value }));
+                      set("valor_unitario_padrao", nullableDecimal(e.target.value));
+                    }}
+                    onBlur={() => setFinanceDraft((draft) => ({
+                      ...draft,
+                      valorUnitario: form.valor_unitario_padrao == null ? "" : formatUnitValueBR(form.valor_unitario_padrao),
+                    }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Sugestão inicial; usada somente quando o valor total padrão estiver vazio.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Valor total padrão (R$)</Label>
+                  <Input
+                    inputMode="decimal"
+                    placeholder="Ex.: 22500,00"
+                    value={financeDraft.valorTotal}
+                    onChange={(e) => {
+                      setFinanceDraft((draft) => ({ ...draft, valorTotal: e.target.value }));
+                      set("valor_total_padrao", nullableDecimal(e.target.value, parseCurrencyBR));
+                    }}
+                    onBlur={() => setFinanceDraft((draft) => ({
+                      ...draft,
+                      valorTotal: form.valor_total_padrao == null ? "" : formatCurrencyBR(form.valor_total_padrao),
+                    }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Sugestão inicial da prévia; quando preenchido, este valor tem prioridade sobre o valor unitário padrão.
+                  </p>
+                </div>
+              </TabsContent>
+
+              {/* Aba 3 — Cooperativas liberadas */}
               <TabsContent value="cooperativas" className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
@@ -376,7 +450,7 @@ export default function ModelosNota() {
                 </p>
               </TabsContent>
 
-              {/* Aba 3 — Dados adicionais */}
+              {/* Aba 4 — Dados adicionais */}
               <TabsContent value="adicionais" className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>Template de Dados Adicionais</Label>
