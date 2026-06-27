@@ -378,8 +378,13 @@ export function hasPendingPlaceholders(text: string): boolean {
 export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNota): Nota {
   const rec = r.recebimentoRow ?? r.searchedRow;
   const precoSaca = rec.precoUnitIcms || 0;
-  const valorUnitario = precoSaca / SACA_KG;
   const quantidade = toPositiveNumber(modelo.quantidade_padrao) ?? QUANTIDADE_PADRAO;
+  const valorTotalPadrao = toPositiveNumber(modelo.valor_total_padrao);
+  const valorUnitarioPadrao = toPositiveNumber(modelo.valor_unitario_padrao);
+  const valorUnitario = valorTotalPadrao != null
+    ? valorTotalPadrao / quantidade
+    : valorUnitarioPadrao ?? precoSaca / SACA_KG;
+  const valorTotal = valorTotalPadrao ?? quantidade * valorUnitario;
   // CST exibida no PDF: prioridade para o Modelo de Nota/CFOP; se vazio, mantém o fallback do produto.
   const cstIcmsPdf = modelo.cst_icms_padrao?.trim() || r.produto?.cst_icms?.trim() || "";
 
@@ -414,7 +419,7 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
     },
     quantidade,
     valorUnitario,
-    valorTotal: quantidade * valorUnitario,
+    valorTotal,
     dataEmissao: todayISO(),
     dataSaida: todayISO(),
     horaSaida: "",

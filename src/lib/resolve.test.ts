@@ -68,6 +68,8 @@ const modelo5118: ModeloNota = {
   tipo_frete_padrao: null,
   cst_icms_padrao: null,
   quantidade_padrao: null,
+  valor_unitario_padrao: null,
+  valor_total_padrao: null,
   dados_adicionais_template: null,
   ativo: true,
   created_at: "",
