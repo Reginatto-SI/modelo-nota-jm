@@ -8,6 +8,7 @@ import {
   useModelos,
 } from "@/lib/db";
 import type { TipoContrato } from "@/lib/types";
+import { toast } from "sonner";
 
 export default function TiposContrato() {
   const { data: coops = [] } = useCooperativas();
@@ -55,12 +56,52 @@ export default function TiposContrato() {
   };
 
   const columns: ColumnDef<TipoContrato>[] = [
+    { key: "cooperativa_id", label: "Cooperativa", render: (r) => coopName(r.cooperativa_id) },
     { key: "codigo_contrato", label: "Código" },
     { key: "descricao_contrato", label: "Descrição" },
-    { key: "cooperativa_id", label: "Cooperativa", render: (r) => coopName(r.cooperativa_id) },
     { key: "modelo_nota_id", label: "Modelo", render: (r) => modeloLabel(r.modelo_nota_id) },
     { key: "ativo", label: "Status", render: (r) => <AtivoBadge ativo={r.ativo} /> },
   ];
+
+  const normalize = (value: unknown) => String(value ?? "").trim().toUpperCase();
+
+  const saveTipoContrato = async (record: Partial<TipoContrato>) => {
+    if (!record.cooperativa_id) {
+      toast.error("Selecione a cooperativa de destino.");
+      throw new Error("Cooperativa de destino não selecionada.");
+    }
+
+    const duplicado = data.some((item) => {
+      const mesmoRegistro = record.id && item.id === record.id;
+      return (
+        !mesmoRegistro &&
+        item.cooperativa_id === record.cooperativa_id &&
+        normalize(item.codigo_contrato) === normalize(record.codigo_contrato) &&
+        item.modelo_nota_id === record.modelo_nota_id
+      );
+    });
+
+    if (duplicado) {
+      toast.error("Já existe uma regra cadastrada para esta cooperativa, código e modelo.");
+      throw new Error("Regra duplicada para cooperativa, código e modelo.");
+    }
+
+    await save.mutateAsync(record);
+  };
+
+  const duplicateTipoContrato = (row: TipoContrato): Partial<TipoContrato> => {
+    // A cooperativa fica vazia na duplicação para forçar a escolha consciente do destino.
+    return {
+      codigo_contrato: row.codigo_contrato,
+      descricao_contrato: row.descricao_contrato,
+      tp_faturamento: row.tp_faturamento,
+      cfop: row.cfop,
+      modelo_nota_id: row.modelo_nota_id,
+      exige_contrato_vinculado: row.exige_contrato_vinculado,
+      gera_operacao_casada: row.gera_operacao_casada,
+      ativo: row.ativo,
+    };
+  };
 
   return (
     <Layout>
@@ -73,8 +114,10 @@ export default function TiposContrato() {
         columns={columns}
         empty={{ ativo: true, exige_contrato_vinculado: false, gera_operacao_casada: false }}
         searchKeys={["codigo_contrato", "descricao_contrato"]}
-        onSave={(r) => save.mutateAsync(r)}
+        onSave={saveTipoContrato}
         onDelete={(id) => del.mutateAsync(id)}
+        onDuplicate={duplicateTipoContrato}
+        duplicateTitle="Criar regra a partir desta"
       />
     </Layout>
   );
