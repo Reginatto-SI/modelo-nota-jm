@@ -21,9 +21,9 @@ import { useReport } from "@/context/ReportContext";
 import {
   useCooperativas, useArmazens, useProdutos, useModelos, useTiposContrato,
 } from "@/lib/db";
-import { resolveContrato, type CadastrosBundle, type ResolveResult } from "@/lib/resolve";
-import { buildNota, calculateValorUnitarioKg, isMoedaDolar, type CfopModelo, type Nota } from "@/lib/nota";
-import type { Grl019Row } from "@/lib/types";
+import { QUANTIDADE_PADRAO, resolveContrato, type CadastrosBundle, type ResolveResult } from "@/lib/resolve";
+import { buildNota, calculateCurrencyValues, isMoedaDolar, normalizeMoeda, type CfopModelo, type Nota } from "@/lib/nota";
+import type { Grl019Report, Grl019Row } from "@/lib/types";
 import { toast } from "sonner";
 
 function normalize(value: unknown) {
@@ -225,7 +225,7 @@ export default function Pesquisa() {
         </div>
       </div>
 
-      <ContractDetailsDialog res={details} onOpenChange={(open) => !open && setDetails(null)} />
+      <ContractDetailsDialog report={report} res={details} onOpenChange={(open) => !open && setDetails(null)} />
 
       <AlertDialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)}>
         <AlertDialogContent>
@@ -254,12 +254,21 @@ export default function Pesquisa() {
   );
 }
 
-function ContractDetailsDialog({ res, onOpenChange }: { res: ResolveResult | null; onOpenChange: (open: boolean) => void }) {
+function ContractDetailsDialog({ report, res, onOpenChange }: { report: Grl019Report; res: ResolveResult | null; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
   if (!res) return null;
 
   const row = res.searchedRow;
   const linkedRow = findLinkedRow(res);
+  const calcRow = res.recebimentoRow ?? res.searchedRow;
+  const quantidadeKg = Number(res.modelo?.quantidade_padrao) > 0 ? Number(res.modelo?.quantidade_padrao) : QUANTIDADE_PADRAO;
+  const currencyCalc = calculateCurrencyValues({
+    precoSaca: calcRow.precoUnitIcms,
+    moeda: calcRow.moeda,
+    quantidadeKg,
+    fatorDolar: res.modelo?.fator_conversao_dolar,
+  });
+  const suporte = buildSupportData(res, report, linkedRow, currencyCalc);
   const armazemOrigem = getArmazemSource(res, linkedRow);
   const showArmazemOrigem = Boolean(res.ofereceCasada || res.cfop === "5923" || res.modelo5923);
   // Reutiliza as mensagens já produzidas por resolveContrato para não criar uma segunda regra de validação.
@@ -312,13 +321,14 @@ function ContractDetailsDialog({ res, onOpenChange }: { res: ResolveResult | nul
           <DetailBlock title="Produto e valores">
             <DetailItem label="Código do produto" value={row.codItem} />
             <DetailItem label="Descrição do produto" value={row.descItem} full />
-            <DetailItem label="Moeda" value={row.moeda} />
-            <DetailItem label="Preço unitário com ICMS / preço da saca" value={formatCurrency(row.precoUnitIcms, row.moeda)} />
-            {isMoedaDolar(row.moeda) && (
+            <DetailItem label="Moeda" value={calcRow.moeda} />
+            <DetailItem label="Moeda normalizada" value={currencyCalc?.moedaNormalizada ?? normalizeMoeda(calcRow.moeda)} />
+            <DetailItem label="Preço original / preço da saca" value={formatCurrency(calcRow.precoUnitIcms, calcRow.moeda)} />
+            {isMoedaDolar(calcRow.moeda) && (
               <>
-                <DetailItem label="Fator conversão" value={formatFatorConversao(res.modelo?.fator_conversao_dolar)} />
-                <DetailItem label="Preço convertido" value={res.modelo?.fator_conversao_dolar ? formatCurrency(row.precoUnitIcms * res.modelo.fator_conversao_dolar) : "—"} />
-                <DetailItem label="Valor unitário KG" value={res.modelo?.fator_conversao_dolar ? formatUnit(calculateValorUnitarioKg(row.precoUnitIcms * res.modelo.fator_conversao_dolar)) : "exige fator de conversão"} />
+                <DetailItem label="Fator conversão" value={formatFatorConversao(currencyCalc?.fatorConversao)} />
+                <DetailItem label="Preço convertido" value={formatCurrency(currencyCalc?.precoSacaConvertido)} />
+                <DetailItem label="Valor unitário KG" value={formatUnit(currencyCalc?.valorUnitarioKg ?? null)} />
               </>
             )}
           </DetailBlock>
@@ -377,6 +387,32 @@ function ContractDetailsDialog({ res, onOpenChange }: { res: ResolveResult | nul
           )}
         </DetailBlock>
 
+        <DetailBlock title="Dados de Suporte">
+          <div className="sm:col-span-2 space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <DetailItem label="Contrato principal" value={suporte.contrato} />
+              <DetailItem label="Contrato vinculado" value={suporte.contratoVinculado} />
+              <DetailItem label="Índice/linha GRL019" value={suporte.grl019Index} />
+              <DetailItem label="ID cooperativa" value={suporte.cooperativaId} />
+              <DetailItem label="ID tipo contrato" value={suporte.tipoContratoId} />
+              <DetailItem label="ID modelo nota" value={suporte.modeloNotaId} />
+              <DetailItem label="ID produto" value={suporte.produtoId} />
+              <DetailItem label="ID armazém/destinatário" value={suporte.armazemId} />
+              <DetailItem label="Moeda original" value={suporte.moedaOriginal} />
+              <DetailItem label="Moeda normalizada" value={suporte.moedaNormalizada} />
+              <DetailItem label="Preço saca original" value={formatNumber(suporte.precoSacaOriginal)} />
+              <DetailItem label="Fator aplicado" value={formatNumber(suporte.fatorConversao)} />
+              <DetailItem label="Origem do fator" value={formatOrigemFator(suporte.origemFatorConversao)} />
+              <DetailItem label="Preço saca convertido" value={formatNumber(suporte.precoSacaConvertido)} />
+              <DetailItem label="Valor unitário KG" value={formatNumber(suporte.valorUnitarioKg, 6)} />
+              <DetailItem label="Status parametrização" value={suporte.situacaoParametrizacao} full />
+            </div>
+            <Button size="sm" variant="outline" onClick={() => copySupportData(suporte)}>
+              <Copy className="mr-2 h-4 w-4" /> Copiar dados de suporte
+            </Button>
+          </div>
+        </DetailBlock>
+
         {/* Sem pré-preenchimento automático: os dados ficam visíveis para copiar e revisar manualmente no cadastro. */}
         <DetailBlock title="Dados para cadastro">
           <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">{dadosCadastro}</pre>
@@ -410,8 +446,8 @@ function DetailItem({ label, value, full }: { label: string; value: unknown; ful
   );
 }
 
-function formatCurrency(value: number, moeda?: string) {
-  if (!Number.isFinite(value)) return "—";
+function formatCurrency(value: unknown, moeda?: string) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   if (isMoedaDolar(moeda)) return `US$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -424,6 +460,60 @@ function formatUnit(value: number | null) {
 function formatFatorConversao(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value) || value <= 0) return "não configurado";
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatNumber(value: unknown, maximumFractionDigits = 2) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits });
+}
+
+function formatOrigemFator(value: unknown) {
+  return value === "fallback" ? "fallback técnico" : value;
+}
+
+async function copySupportData(data: Record<string, unknown>) {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    toast.success("Dados de suporte copiados.");
+  } catch {
+    toast.error("Não foi possível copiar os dados de suporte automaticamente.");
+  }
+}
+
+function buildSupportData(
+  res: ResolveResult,
+  report: Grl019Report,
+  linkedRow: Grl019Row | undefined,
+  currencyCalc: ReturnType<typeof calculateCurrencyValues>,
+) {
+  const row = res.searchedRow;
+  const calcRow = res.recebimentoRow ?? row;
+  const grl019Index = report.rows.findIndex((candidate) => candidate === row);
+  const grl019Line = grl019Index >= 0 ? (report.headerRow ?? 0) + grl019Index + 1 : "não encontrado";
+  const situacaoParametrizacao = res.errors.length > 0 ? "Erro de parametrização" : res.podeGerar ? "Pronto para gerar" : "Com avisos/pendências";
+
+  return {
+    contrato: row.contrato || "—",
+    contratoVinculado: row.contratoVinculado || linkedRow?.contrato || "—",
+    grl019Index: grl019Line,
+    cooperativaId: res.cooperativa?.id || "não encontrado",
+    cooperativaNomeGrl019: row.empresa || "—",
+    tipoContratoId: res.tipoContrato?.id || "não encontrado",
+    codigoTipoContrato: res.tipoContrato?.codigo_contrato || row.codContrato || "—",
+    modeloNotaId: res.modelo?.id || "não encontrado",
+    cfop: res.ofereceCasada ? "5118 + 5923" : res.modelo?.cfop || res.cfop || "—",
+    produtoId: res.produto?.id || "não encontrado",
+    codigoProduto: res.produto?.codigo_produto || row.codItem || "—",
+    armazemId: res.armazem?.id || "não encontrado",
+    moedaOriginal: calcRow.moeda || "—",
+    moedaNormalizada: currencyCalc?.moedaNormalizada ?? normalizeMoeda(calcRow.moeda),
+    precoSacaOriginal: currencyCalc?.precoSacaOriginal ?? calcRow.precoUnitIcms,
+    fatorConversao: currencyCalc?.fatorConversao ?? 1,
+    origemFatorConversao: currencyCalc?.origemFatorConversao ?? "não aplicável",
+    precoSacaConvertido: currencyCalc?.precoSacaConvertido ?? calcRow.precoUnitIcms,
+    valorUnitarioKg: currencyCalc?.valorUnitarioKg ?? null,
+    situacaoParametrizacao,
+  };
 }
 
 function buildDadosCadastro(res: ResolveResult, linkedRow?: Grl019Row) {

@@ -195,14 +195,43 @@ function toPositiveNumber(value: unknown): number | null {
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
 }
 
-export function isMoedaDolar(moeda: string | null | undefined): boolean {
+export const FATOR_DOLAR_FALLBACK = 4;
+
+export type MoedaNormalizada = "BRL" | "USD" | "UNKNOWN";
+
+export type CurrencyCalcInput = {
+  precoSaca: number;
+  moeda?: string | null;
+  quantidadeKg: number;
+  fatorDolar?: number | null;
+};
+
+export type OrigemFatorConversao = "modelo" | "fallback" | "não aplicável";
+
+export type CurrencyCalcResult = {
+  moedaNormalizada: MoedaNormalizada;
+  precoSacaOriginal: number;
+  fatorConversao: number;
+  origemFatorConversao: OrigemFatorConversao;
+  precoSacaConvertido: number;
+  valorUnitarioKg: number;
+  valorTotal: number;
+};
+
+export function normalizeMoeda(moeda: string | null | undefined): MoedaNormalizada {
   const normalized = (moeda ?? "")
     .toString()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toUpperCase();
-  return ["US$", "USD", "DOLAR"].includes(normalized);
+  if (["US$", "USD", "DOLAR"].includes(normalized)) return "USD";
+  if (!normalized || ["R$", "BRL", "REAL", "REAIS"].includes(normalized)) return "BRL";
+  return "UNKNOWN";
+}
+
+export function isMoedaDolar(moeda: string | null | undefined): boolean {
+  return normalizeMoeda(moeda) === "USD";
 }
 
 export function calculateValorUnitarioKg(precoSaca: unknown): number | null {
@@ -210,11 +239,30 @@ export function calculateValorUnitarioKg(precoSaca: unknown): number | null {
   return precoSacaValido == null ? null : precoSacaValido / SACA_KG;
 }
 
-function convertPrecoSacaDolar(precoSaca: number | null, moeda: string | null | undefined, fatorConversaoDolar: unknown): number | null {
-  if (precoSaca == null) return null;
-  if (!isMoedaDolar(moeda)) return precoSaca;
-  const fator = toPositiveNumber(fatorConversaoDolar);
-  return fator == null ? null : precoSaca * fator;
+export function calculateCurrencyValues(input: CurrencyCalcInput): CurrencyCalcResult | null {
+  const precoSacaOriginal = toPositiveNumber(input.precoSaca);
+  const quantidadeKg = toPositiveNumber(input.quantidadeKg);
+  if (precoSacaOriginal == null || quantidadeKg == null) return null;
+
+  const moedaNormalizada = normalizeMoeda(input.moeda);
+  const fatorDolar = toPositiveNumber(input.fatorDolar);
+  const origemFatorConversao: OrigemFatorConversao = moedaNormalizada !== "USD"
+    ? "não aplicável"
+    : fatorDolar != null ? "modelo" : "fallback";
+  // Ponto único do fallback provisório de dólar: evita conversões divergentes entre detalhes, prévia e PDF.
+  const fatorConversao = moedaNormalizada === "USD" ? fatorDolar ?? FATOR_DOLAR_FALLBACK : 1;
+  const precoSacaConvertido = precoSacaOriginal * fatorConversao;
+  const valorUnitarioKg = precoSacaConvertido / SACA_KG;
+
+  return {
+    moedaNormalizada,
+    precoSacaOriginal,
+    fatorConversao,
+    origemFatorConversao,
+    precoSacaConvertido,
+    valorUnitarioKg,
+    valorTotal: quantidadeKg * valorUnitarioKg,
+  };
 }
 
 function partyFromCooperativa(cooperativa?: Cooperativa): NotaParty {
@@ -400,22 +448,33 @@ export function hasPendingPlaceholders(text: string): boolean {
   return getPendingPlaceholders(text).length > 0;
 }
 
+const MENSAGEM_FALLBACK_DOLAR = "Contrato em dólar sem fator de conversão configurado no modelo. O sistema aplicou temporariamente o fator padrão 4,00. Revise antes de gerar o PDF.";
+
+function addWarningOnce(warnings: string[], warning: string) {
+  if (!warnings.includes(warning)) warnings.push(warning);
+}
+
 export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNota): Nota {
   const rec = r.recebimentoRow ?? r.searchedRow;
   const precoSaca = toPositiveNumber(rec.precoUnitIcms);
   const quantidade = toPositiveNumber(modelo.quantidade_padrao) ?? QUANTIDADE_PADRAO;
-  const precoSacaConvertido = convertPrecoSacaDolar(precoSaca, rec.moeda, modelo.fator_conversao_dolar);
-  const valorUnitarioGrl019 = calculateValorUnitarioKg(precoSacaConvertido);
+  const currencyCalc = calculateCurrencyValues({
+    precoSaca: precoSaca ?? 0,
+    moeda: rec.moeda,
+    quantidadeKg: quantidade,
+    fatorDolar: modelo.fator_conversao_dolar,
+  });
+  const valorUnitarioGrl019 = currencyCalc?.valorUnitarioKg ?? null;
   const valorTotalPadrao = toPositiveNumber(modelo.valor_total_padrao);
   const valorUnitarioPadrao = toPositiveNumber(modelo.valor_unitario_padrao);
   // Prioridade financeira: preço da saca do GRL019 sempre prevalece; valores do modelo são apenas fallback.
-  const bloqueiaPorDolarSemFator = precoSaca != null && isMoedaDolar(rec.moeda) && toPositiveNumber(modelo.fator_conversao_dolar) == null;
-  const valorUnitario = bloqueiaPorDolarSemFator ? 0 : valorUnitarioGrl019 ?? valorUnitarioPadrao ?? (valorTotalPadrao != null ? valorTotalPadrao / quantidade : 0);
+  const valorUnitario = valorUnitarioGrl019 ?? valorUnitarioPadrao ?? (valorTotalPadrao != null ? valorTotalPadrao / quantidade : 0);
   const valorTotal = quantidade * valorUnitario;
-  if (bloqueiaPorDolarSemFator) {
-    r.warnings.push("Contrato em dólar localizado no GRL019, mas o modelo não possui fator de conversão configurado. Informe o fator na aba Dados financeiros ou ajuste o valor unitário manualmente.");
-  } else if (valorUnitarioGrl019 == null) {
-    r.warnings.push(
+  if (currencyCalc?.origemFatorConversao === "fallback") {
+    addWarningOnce(r.warnings, MENSAGEM_FALLBACK_DOLAR);
+  }
+  if (valorUnitarioGrl019 == null) {
+    addWarningOnce(r.warnings,
       valorUnitario > 0
         ? "Preço da saca não localizado no GRL019. Valor inicial calculado pelo fallback financeiro do modelo."
         : "Preço da saca não localizado no GRL019. Informe o valor unitário manualmente antes de gerar o PDF.",
@@ -466,7 +525,7 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
     dadosAdicionais: "",
     observacao: rec.observacao,
     // Metadados vindos da mesma resolução usada no modelo/prévia para nomear o PDF sem criar fonte paralela.
-    requiresManualValorUnitario: bloqueiaPorDolarSemFator,
+    requiresManualValorUnitario: valorUnitario <= 0,
     pdfFileNameMeta: {
       contrato: r.searchedRow.contrato,
       contratoVinculado: r.searchedRow.contratoVinculado,
