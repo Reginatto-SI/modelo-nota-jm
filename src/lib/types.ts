@@ -64,6 +64,7 @@ export interface ModeloNota {
   quantidade_padrao: number | null;
   valor_unitario_padrao: number | null;
   valor_total_padrao: number | null;
+  fator_conversao_dolar: number | null;
   dados_adicionais_template: string | null;
   ativo: boolean;
   created_at: string;
@@ -105,6 +106,7 @@ export interface Grl019Row {
   codItem: string;
   descItem: string;
   precoUnitIcms: number;
+  moeda?: string;
   tpFrete: string;
   observacao: string;
   _raw: Record<string, unknown>;

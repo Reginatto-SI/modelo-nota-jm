@@ -22,7 +22,7 @@ import {
   useCooperativas, useArmazens, useProdutos, useModelos, useTiposContrato,
 } from "@/lib/db";
 import { resolveContrato, type CadastrosBundle, type ResolveResult } from "@/lib/resolve";
-import { buildNota, type CfopModelo, type Nota } from "@/lib/nota";
+import { buildNota, calculateValorUnitarioKg, isMoedaDolar, type CfopModelo, type Nota } from "@/lib/nota";
 import type { Grl019Row } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -312,7 +312,15 @@ function ContractDetailsDialog({ res, onOpenChange }: { res: ResolveResult | nul
           <DetailBlock title="Produto e valores">
             <DetailItem label="Código do produto" value={row.codItem} />
             <DetailItem label="Descrição do produto" value={row.descItem} full />
-            <DetailItem label="Preço unitário com ICMS / preço da saca" value={formatCurrency(row.precoUnitIcms)} />
+            <DetailItem label="Moeda" value={row.moeda} />
+            <DetailItem label="Preço unitário com ICMS / preço da saca" value={formatCurrency(row.precoUnitIcms, row.moeda)} />
+            {isMoedaDolar(row.moeda) && (
+              <>
+                <DetailItem label="Fator conversão" value={formatFatorConversao(res.modelo?.fator_conversao_dolar)} />
+                <DetailItem label="Preço convertido" value={res.modelo?.fator_conversao_dolar ? formatCurrency(row.precoUnitIcms * res.modelo.fator_conversao_dolar) : "—"} />
+                <DetailItem label="Valor unitário KG" value={res.modelo?.fator_conversao_dolar ? formatUnit(calculateValorUnitarioKg(row.precoUnitIcms * res.modelo.fator_conversao_dolar)) : "exige fator de conversão"} />
+              </>
+            )}
           </DetailBlock>
 
           <DetailBlock title="Parametrização encontrada">
@@ -402,9 +410,20 @@ function DetailItem({ label, value, full }: { label: string; value: unknown; ful
   );
 }
 
-function formatCurrency(value: number) {
+function formatCurrency(value: number, moeda?: string) {
   if (!Number.isFinite(value)) return "—";
+  if (isMoedaDolar(moeda)) return `US$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatUnit(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 6, maximumFractionDigits: 6 });
+}
+
+function formatFatorConversao(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value <= 0) return "não configurado";
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function buildDadosCadastro(res: ResolveResult, linkedRow?: Grl019Row) {

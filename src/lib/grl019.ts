@@ -20,6 +20,7 @@ export const COLUMN_LABELS: Record<Grl019ColumnKey, string> = {
   codItem: "COD.ITEM",
   descItem: "DESC.ITEM",
   precoUnitIcms: "PREÇO UNIT. C/ICMS",
+  moeda: "MOEDA",
   tpFrete: "TP FRETE",
   observacao: "OBSERVAÇÃO",
 };
@@ -42,6 +43,7 @@ const COLUMN_MAP: Record<Grl019ColumnKey, string[]> = {
   codItem: ["coditem", "codigoitem"],
   descItem: ["descitem", "descricaoitem"],
   precoUnitIcms: ["precounitcicms", "precounitariocicms", "precounit"],
+  moeda: ["moeda"],
   tpFrete: ["tpfrete", "tipofrete"],
   observacao: ["observacao", "observacoes", "obs"],
 };
@@ -62,7 +64,7 @@ const REQUIRED: Grl019ColumnKey[] = [
   "precoUnitIcms",
 ];
 
-const RECOMMENDED: Grl019ColumnKey[] = ["ie", "endereco", "municipio", "estado", "tpFrete", "observacao"];
+const RECOMMENDED: Grl019ColumnKey[] = ["ie", "endereco", "municipio", "estado", "moeda", "tpFrete", "observacao"];
 const HEADER_DETECTION_REQUIRED: Grl019ColumnKey[] = [
   "contrato",
   "empresa",
@@ -291,6 +293,7 @@ export async function parseGrl019(file: File): Promise<ParseResult> {
         codItem: str(g(raw, "codItem")),
         descItem: str(g(raw, "descItem")),
         precoUnitIcms: toNumber(g(raw, "precoUnitIcms")),
+        moeda: str(g(raw, "moeda")),
         tpFrete: str(g(raw, "tpFrete")),
         observacao: str(g(raw, "observacao")),
         _raw: Object.fromEntries(headerValues.map((headerValue, index) => [str(headerValue) || `COLUNA ${index + 1}`, raw[index]])),

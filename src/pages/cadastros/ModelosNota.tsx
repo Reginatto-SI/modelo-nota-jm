@@ -72,9 +72,12 @@ const EMPTY: ModeloForm = {
   quantidade_padrao: null,
   valor_unitario_padrao: null,
   valor_total_padrao: null,
+  fator_conversao_dolar: null,
   dados_adicionais_template: TEMPLATE_EXEMPLO,
   cooperativa_ids: [],
 };
+
+const formatFactorBR = (value: number) => value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function ModelosNota() {
   const { data: coops = [] } = useCooperativas();
@@ -87,7 +90,7 @@ export default function ModelosNota() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("dados");
   const [form, setForm] = useState<ModeloForm>(EMPTY);
-  const [financeDraft, setFinanceDraft] = useState({ quantidade: "", valorUnitario: "", valorTotal: "" });
+  const [financeDraft, setFinanceDraft] = useState({ quantidade: "", valorUnitario: "", valorTotal: "", fatorDolar: "" });
   const [q, setQ] = useState("");
   const [delId, setDelId] = useState<string | null>(null);
 
@@ -104,7 +107,7 @@ export default function ModelosNota() {
 
   const openNew = () => {
     setForm({ ...EMPTY });
-    setFinanceDraft({ quantidade: "", valorUnitario: "", valorTotal: "" });
+    setFinanceDraft({ quantidade: "", valorUnitario: "", valorTotal: "", fatorDolar: "" });
     setTab("dados");
     setOpen(true);
   };
@@ -114,6 +117,7 @@ export default function ModelosNota() {
       quantidade: row.quantidade_padrao == null ? "" : String(row.quantidade_padrao),
       valorUnitario: row.valor_unitario_padrao == null ? "" : formatUnitValueBR(row.valor_unitario_padrao),
       valorTotal: row.valor_total_padrao == null ? "" : formatCurrencyBR(row.valor_total_padrao),
+      fatorDolar: row.fator_conversao_dolar == null ? "" : formatFactorBR(row.fator_conversao_dolar),
     });
     setTab("dados");
     setOpen(true);
@@ -350,9 +354,9 @@ export default function ModelosNota() {
               <TabsContent value="financeiros" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground sm:col-span-2">
                   <p className="font-medium text-foreground">Prioridade dos valores iniciais da prévia</p>
-                  <p>Se o Valor total padrão for preenchido, ele tem prioridade e o sistema recalcula o valor unitário pela quantidade.</p>
-                  <p>Se o Valor total padrão estiver vazio, mas o Valor unitário padrão estiver preenchido, o sistema calcula o total.</p>
-                  <p>Se ambos estiverem vazios, o sistema usa o preço da saca do GRL019 dividido por 60.</p>
+                  <p>Quando houver preço da saca válido no GRL019, ele sempre tem prioridade sobre os valores padrão do modelo.</p>
+                  <p>Para contratos em dólar, o sistema aplica o fator configurado abaixo antes de dividir por 60.</p>
+                  <p>Os valores padrão do modelo continuam sendo fallback somente quando o GRL019 não possui preço válido.</p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -391,7 +395,7 @@ export default function ModelosNota() {
                     }))}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Sugestão inicial; usada somente quando o valor total padrão estiver vazio.
+                    Fallback inicial quando o GRL019 não possui preço válido e o valor total padrão estiver vazio.
                   </p>
                 </div>
 
@@ -411,7 +415,27 @@ export default function ModelosNota() {
                     }))}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Sugestão inicial da prévia; quando preenchido, este valor tem prioridade sobre o valor unitário padrão.
+                    Fallback inicial quando o GRL019 não possui preço válido; tem prioridade sobre o valor unitário padrão nesse fallback.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Fator de conversão para dólar</Label>
+                  <Input
+                    inputMode="decimal"
+                    placeholder="Ex.: 4,00"
+                    value={financeDraft.fatorDolar}
+                    onChange={(e) => {
+                      setFinanceDraft((draft) => ({ ...draft, fatorDolar: e.target.value }));
+                      set("fator_conversao_dolar", nullableDecimal(e.target.value));
+                    }}
+                    onBlur={() => setFinanceDraft((draft) => ({
+                      ...draft,
+                      fatorDolar: form.fator_conversao_dolar == null ? "" : formatFactorBR(form.fator_conversao_dolar),
+                    }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Usado somente quando a coluna MOEDA do GRL019 estiver como US$, USD, DOLAR ou DÓLAR. Ex.: preço da saca US$ 12,00 × 4 = R$ 48,00.
                   </p>
                 </div>
               </TabsContent>

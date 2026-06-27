@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import { parseGrl019 } from "./grl019";
 
-const REQUIRED_HEADERS = [
+const HEADERS_BASE = [
   "CONTRATO",
   "CONTRATO VINCULADO",
   "EMPRESA",
@@ -15,6 +15,8 @@ const REQUIRED_HEADERS = [
   "DESC.ITEM",
   "PREÇO UNIT. C/ICMS",
 ];
+
+const HEADERS_BASE_COM_MOEDA = [...HEADERS_BASE, "MOEDA"];
 
 function makeFile(rows: unknown[][], name = "grl019.xlsx") {
   const wb = XLSX.utils.book_new();
@@ -32,8 +34,8 @@ describe("parseGrl019", () => {
       ["Período"],
       ["Empresa"],
       [""],
-      REQUIRED_HEADERS,
-      ["1", "2", "JM", "RECEBIMENTO", "10", "Soja", "Cliente", "123", "ITEM", "Produto", 12.5],
+      HEADERS_BASE_COM_MOEDA,
+      ["1", "2", "JM", "RECEBIMENTO", "10", "Soja", "Cliente", "123", "ITEM", "Produto", 12.5, "US$"],
     ]);
 
     const result = await parseGrl019(file);
@@ -41,10 +43,31 @@ describe("parseGrl019", () => {
     expect(result.missingColumns).toEqual([]);
     expect(result.report?.headerRow).toBe(6);
     expect(result.report?.rows).toHaveLength(1);
+    expect(result.report?.rows[0].moeda).toBe("US$");
+  });
+
+
+  it("importa GRL019 sem MOEDA porque a coluna é recomendada, não obrigatória", async () => {
+    const file = makeFile([
+      ["Relatório GRL019"],
+      ["Filtro"],
+      ["Período"],
+      ["Empresa"],
+      [""],
+      HEADERS_BASE,
+      ["1", "2", "JM", "RECEBIMENTO", "10", "Soja", "Cliente", "123", "ITEM", "Produto", 12.5],
+    ]);
+
+    const result = await parseGrl019(file);
+
+    expect(result.missingColumns).toEqual([]);
+    expect(result.missingRecommendedColumns).toContain("MOEDA");
+    expect(result.report?.rows).toHaveLength(1);
+    expect(result.report?.rows[0].moeda).toBe("");
   });
 
   it("retorna diagnóstico com nomes reais quando falta coluna obrigatória", async () => {
-    const headersWithoutEmpresa = REQUIRED_HEADERS.filter((header) => header !== "EMPRESA");
+    const headersWithoutEmpresa = HEADERS_BASE.filter((header) => header !== "EMPRESA");
     const file = makeFile([headersWithoutEmpresa], "invalido.xlsx");
 
     const result = await parseGrl019(file);
