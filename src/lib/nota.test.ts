@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNota, buildNotaPdfFileName, syncPlacaCavaloPlaceholder } from "./nota";
+import { buildNota, buildNotaPdfFileName, calculateValorUnitarioKg, syncPlacaCavaloPlaceholder } from "./nota";
 import { TIPO_FRETE_DEFAULT } from "./tipoFrete";
 import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "./numberFormat";
 import type { Cooperativa, Grl019Row, ModeloNota, Produto } from "./types";
@@ -95,7 +95,7 @@ function resolveResult(): ResolveResult {
 
 describe("buildNota", () => {
 
-  it("mantém o fallback financeiro atual do GRL019 quando o modelo não tem valores padrão", () => {
+  it("prioriza o preço da saca do GRL019 para calcular valor unitário por KG", () => {
     const nota = buildNota(resolveResult(), "5118", modeloBase);
 
     expect(nota.quantidade).toBe(30000);
@@ -110,8 +110,8 @@ describe("buildNota", () => {
       valor_unitario_padrao: 0.7,
     });
 
-    expect(nota.valorUnitario).toBe(0.7);
-    expect(nota.valorTotal).toBe(21000);
+    expect(nota.valorUnitario).toBe(2);
+    expect(nota.valorTotal).toBe(60000);
   });
 
   it("usa valor total padrão para recalcular o unitário inicial", () => {
@@ -121,8 +121,8 @@ describe("buildNota", () => {
       valor_total_padrao: 22500,
     });
 
-    expect(nota.valorTotal).toBe(22500);
-    expect(nota.valorUnitario).toBe(0.75);
+    expect(nota.valorTotal).toBe(60000);
+    expect(nota.valorUnitario).toBe(2);
   });
 
   it("prioriza valor total padrão quando total e unitário forem informados", () => {
@@ -133,8 +133,28 @@ describe("buildNota", () => {
       valor_total_padrao: 22500,
     });
 
-    expect(nota.valorTotal).toBe(22500);
-    expect(nota.valorUnitario).toBe(0.75);
+    expect(nota.valorTotal).toBe(60000);
+    expect(nota.valorUnitario).toBe(2);
+  });
+
+
+  it("usa valores do modelo apenas como fallback quando o GRL019 não tem preço válido", () => {
+    const res = resolveResult();
+    res.recebimentoRow = { ...row, precoUnitIcms: 0 };
+    const nota = buildNota(res, "5118", {
+      ...modeloBase,
+      quantidade_padrao: 30000,
+      valor_unitario_padrao: 0.7,
+      valor_total_padrao: 22500,
+    });
+
+    expect(nota.valorUnitario).toBe(0.7);
+    expect(nota.valorTotal).toBe(21000);
+    expect(res.warnings).toContain("Preço da saca não localizado no GRL019. Valor inicial calculado pelo fallback financeiro do modelo.");
+  });
+
+  it("calcula valor unitário por KG a partir do preço da saca", () => {
+    expect(calculateValorUnitarioKg(38)).toBeCloseTo(0.6333333333);
   });
 
   it("usa o tipo de frete padrão configurado no modelo", () => {
@@ -393,9 +413,9 @@ describe("formatadores de valores brasileiros", () => {
     expect(parseCurrencyBR("R$ 22.500,00")).toBe(22500);
   });
 
-  it("mantém duas casas visuais para valor unitário e moeda", () => {
-    expect(formatUnitValueBR(0.7)).toBe("0,70");
-    expect(formatUnitValueBR(0.6583333333333333)).toBe("0,65833333");
+  it("mantém seis casas visuais para valor unitário e moeda", () => {
+    expect(formatUnitValueBR(0.7)).toBe("0,700000");
+    expect(formatUnitValueBR(0.6333333333333333)).toBe("0,633333");
     expect(formatCurrencyBR(21000)).toBe("R$ 21.000,00");
   });
 });

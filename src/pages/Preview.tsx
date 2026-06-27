@@ -72,8 +72,11 @@ export default function Preview() {
   );
 
   const gerarPdfConfirmado = () => {
-    if (notas.some((n) => n.quantidade <= 0 || n.valorUnitario <= 0 || n.valorTotal <= 0)) {
-      return toast.error("Quantidade e valores devem ser maiores que zero.");
+    if (notas.some((n) => n.valorUnitario <= 0 || n.valorTotal <= 0)) {
+      return toast.error("Preço da saca não localizado no GRL019. Informe o valor unitário manualmente antes de gerar o PDF.");
+    }
+    if (notas.some((n) => n.quantidade <= 0)) {
+      return toast.error("Quantidade deve ser maior que zero.");
     }
     // Cada aba/modelo vira um PDF próprio; não une CFOPs diferentes no mesmo arquivo.
     notas.forEach((nota) => generatePdf([nota], buildNotaPdfFileName(nota)));
@@ -132,7 +135,7 @@ export default function Preview() {
                   <F label="Quantidade (KG)" type="number" value={String(n.quantidade)} onChange={(v) => update(i, { quantidade: Number(v) })} />
                   <MoneyField
                     label="Valor unitário (R$/KG)"
-                    placeholder="Ex.: 0,70"
+                    placeholder="Ex.: 0,633333"
                     value={drafts[`${i}.valorUnitario`] ?? formatUnitValueBR(n.valorUnitario)}
                     onChange={(v) => {
                       setDraft(i, "valorUnitario", v);
