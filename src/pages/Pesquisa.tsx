@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, FileText, AlertTriangle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertTriangle, Copy, Eye, FileText, Search } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -13,6 +14,9 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { useReport } from "@/context/ReportContext";
 import {
   useCooperativas, useArmazens, useProdutos, useModelos, useTiposContrato,
@@ -56,6 +60,7 @@ export default function Pesquisa() {
   const { report } = useReport();
   const [q, setQ] = useState("");
   const [dialog, setDialog] = useState<ResolveResult | null>(null);
+  const [details, setDetails] = useState<ResolveResult | null>(null);
 
   const { data: cooperativas = [] } = useCooperativas();
   const { data: armazens = [] } = useArmazens();
@@ -169,13 +174,14 @@ export default function Pesquisa() {
                 <TableHead>Agricultor / Razão Social</TableHead>
                 <TableHead>Produto</TableHead>
                 <TableHead>Modelo</TableHead>
+                <TableHead className="w-12 text-center">Detalhes</TableHead>
                 <TableHead className="text-right">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {resolvedRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">Nenhum contrato encontrado.</TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum contrato encontrado.</TableCell>
                 </TableRow>
               ) : resolvedRows.map(({ row: r, res }, i) => (
                 <TableRow key={r.contrato + i}>
@@ -184,6 +190,22 @@ export default function Pesquisa() {
                   <TableCell className="max-w-[180px] truncate">{r.descItem}</TableCell>
                   <TableCell>
                     <ModeloBadge res={res} />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          aria-label="Ver detalhes do contrato"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => setDetails(res)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Ver detalhes do contrato</TooltipContent>
+                    </Tooltip>
                   </TableCell>
                   <TableCell className="text-right">
                     {res.expedicaoVinculadaRecebimento ? (
@@ -202,6 +224,8 @@ export default function Pesquisa() {
           </Table>
         </div>
       </div>
+
+      <ContractDetailsDialog res={details} onOpenChange={(open) => !open && setDetails(null)} />
 
       <AlertDialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)}>
         <AlertDialogContent>
@@ -229,6 +253,209 @@ export default function Pesquisa() {
     </Layout>
   );
 }
+
+function ContractDetailsDialog({ res, onOpenChange }: { res: ResolveResult | null; onOpenChange: (open: boolean) => void }) {
+  const navigate = useNavigate();
+  if (!res) return null;
+
+  const row = res.searchedRow;
+  const linkedRow = findLinkedRow(res);
+  const armazemOrigem = getArmazemSource(res, linkedRow);
+  const showArmazemOrigem = Boolean(res.ofereceCasada || res.cfop === "5923" || res.modelo5923);
+  // Reutiliza as mensagens já produzidas por resolveContrato para não criar uma segunda regra de validação.
+  const pendencias = [...res.errors, ...res.warnings];
+  const dadosCadastro = buildDadosCadastro(res, linkedRow);
+  const atalhosCadastro = buildCadastroShortcuts(pendencias);
+  const copyDadosCadastro = async () => {
+    try {
+      await navigator.clipboard.writeText(dadosCadastro);
+      toast.success("Dados do GRL019 copiados para conferência no cadastro.");
+    } catch {
+      toast.error("Não foi possível copiar as informações automaticamente.");
+    }
+  };
+  const goCadastro = (path: string) => {
+    onOpenChange(false);
+    navigate(path);
+  };
+
+  return (
+    <Dialog open={!!res} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[88vh] max-w-4xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Detalhes do contrato {row.contrato || "-"}</DialogTitle>
+          <DialogDescription>
+            Dados lidos do GRL019 e situação da parametrização atual. Nenhum cadastro é salvo automaticamente.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <DetailBlock title="Dados do contrato">
+            <DetailItem label="Contrato" value={row.contrato} />
+            <DetailItem label="Contrato vinculado" value={row.contratoVinculado} />
+            <DetailItem label="Cooperativa / EMPRESA" value={row.empresa} />
+            <DetailItem label="TP FATURAMENTO" value={row.tpFaturamento} />
+            <DetailItem label="COD.CONTRATO" value={row.codContrato} />
+            <DetailItem label="DESC.CONTRATO" value={row.descContrato} />
+            <DetailItem label="Tipo de frete" value={row.tpFrete} />
+            <DetailItem label="Observação" value={row.observacao} full />
+          </DetailBlock>
+
+          <DetailBlock title="Dados do produtor/agricultor">
+            <DetailItem label="Nome/Razão Social" value={row.nomeRazaoSocial} full />
+            <DetailItem label="CPF/CNPJ" value={row.cpfCnpj} />
+            <DetailItem label="Inscrição Estadual" value={row.ie} />
+            <DetailItem label="Endereço" value={row.endereco} full />
+            <DetailItem label="Município/UF" value={[row.municipio, row.estado].filter(Boolean).join("/")} />
+          </DetailBlock>
+
+          <DetailBlock title="Produto e valores">
+            <DetailItem label="Código do produto" value={row.codItem} />
+            <DetailItem label="Descrição do produto" value={row.descItem} full />
+            <DetailItem label="Preço unitário com ICMS / preço da saca" value={formatCurrency(row.precoUnitIcms)} />
+          </DetailBlock>
+
+          <DetailBlock title="Parametrização encontrada">
+            <DetailItem label="Cooperativa cadastrada" value={res.cooperativa?.razao_social ?? res.cooperativa?.nome_grl019} />
+            <DetailItem label="Tipo de contrato" value={res.tipoContrato?.descricao_contrato ?? res.tipoContrato?.codigo_contrato} />
+            <DetailItem label="Modelo identificado" value={res.modelo ? `CFOP ${res.modelo.cfop} — ${res.modelo.nome_modelo}` : undefined} full />
+            <DetailItem label="Produto cadastrado" value={res.produto?.descricao} />
+            <DetailItem label="Armazém/destinatário" value={res.armazem?.razao_social} />
+            <DetailItem label="Situação da parametrização" value={res.errors.length > 0 ? "Erro de parametrização" : res.podeGerar ? "Pronto para gerar" : "Com avisos/pendências"} />
+          </DetailBlock>
+        </div>
+
+        {row.contratoVinculado && (
+          <DetailBlock title="Resumo do contrato vinculado">
+            <DetailItem label="Número do contrato vinculado" value={row.contratoVinculado} />
+            <DetailItem label="Localizado no GRL019" value={linkedRow ? "Sim" : "Não"} />
+            <DetailItem label="TP FATURAMENTO" value={linkedRow?.tpFaturamento} />
+            <DetailItem label="Nome/Razão Social" value={linkedRow?.nomeRazaoSocial} />
+            <DetailItem label="CPF/CNPJ" value={linkedRow?.cpfCnpj} />
+            <DetailItem label="Produto" value={linkedRow?.descItem} />
+            <DetailItem label="Município/UF" value={linkedRow ? [linkedRow.municipio, linkedRow.estado].filter(Boolean).join("/") : undefined} />
+            {showArmazemOrigem && (
+              <>
+                <DetailItem label="Usado como base do armazém/destinatário" value={armazemOrigem.row === linkedRow ? "Sim" : "Não"} />
+                <DetailItem label="Origem do destinatário final" value={armazemOrigem.label} />
+              </>
+            )}
+          </DetailBlock>
+        )}
+
+        <DetailBlock title="Pendências encontradas">
+          {pendencias.length > 0 ? (
+            <div className="space-y-3">
+              <ul className="list-disc space-y-1 pl-5 text-sm">
+                {pendencias.map((p, index) => <li key={`${p}-${index}`}>{p}</li>)}
+              </ul>
+              {atalhosCadastro.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Atalhos úteis para correção conforme a pendência listada acima. Nenhum cadastro será preenchido ou salvo automaticamente.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {atalhosCadastro.map((atalho) => (
+                      <Button key={atalho.path} size="sm" variant="outline" onClick={() => goCadastro(atalho.path)}>
+                        {atalho.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nenhuma pendência de parametrização encontrada para este registro.</p>
+          )}
+        </DetailBlock>
+
+        {/* Sem pré-preenchimento automático: os dados ficam visíveis para copiar e revisar manualmente no cadastro. */}
+        <DetailBlock title="Dados para cadastro">
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">{dadosCadastro}</pre>
+        </DetailBlock>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={copyDadosCadastro}><Copy className="mr-2 h-4 w-4" /> Copiar informações</Button>
+          <Button onClick={() => onOpenChange(false)}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailBlock({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-lg border bg-card p-4">
+      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+      <div className="grid gap-2 sm:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+function DetailItem({ label, value, full }: { label: string; value: unknown; full?: boolean }) {
+  const display = value === null || value === undefined || value === "" ? "—" : String(value);
+  return (
+    <div className={full ? "sm:col-span-2" : undefined}>
+      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="break-words text-sm">{display}</dd>
+    </div>
+  );
+}
+
+function formatCurrency(value: number) {
+  if (!Number.isFinite(value)) return "—";
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function buildDadosCadastro(res: ResolveResult, linkedRow?: Grl019Row) {
+  const row = res.searchedRow;
+  const armazemOrigem = getArmazemSource(res, linkedRow);
+  const armazem = armazemOrigem.row;
+  return [
+    `Cooperativa: ${row.empresa || "-"}`,
+    `Tipo de contrato: cooperativa=${row.empresa || "-"}; COD.CONTRATO=${row.codContrato || "-"}; DESC.CONTRATO=${row.descContrato || "-"}; TP FATURAMENTO=${row.tpFaturamento || "-"}`,
+    `Produto: COD.ITEM=${row.codItem || "-"}; DESC.ITEM=${row.descItem || "-"}`,
+    `Armazém/destinatário sugerido: origem=${armazemOrigem.label}; CPF/CNPJ=${armazem.cpfCnpj || "-"}; Nome/Razão Social=${armazem.nomeRazaoSocial || "-"}; IE=${armazem.ie || "-"}; Endereço=${armazem.endereco || "-"}; Município=${armazem.municipio || "-"}; UF=${armazem.estado || "-"}`,
+  ].join("\n");
+}
+
+function findLinkedRow(res: ResolveResult) {
+  const row = res.searchedRow;
+  return [res.recebimentoRow, res.expedicaoRow].find(
+    (candidate) => candidate && candidate !== row && candidate.contrato === row.contratoVinculado,
+  );
+}
+
+function getArmazemSource(res: ResolveResult, linkedRow?: Grl019Row) {
+  // Só usa destino vinculado quando a regra/linha indica operação com vínculo, evitando sugerir produtor como armazém.
+  const shouldUseLinkedDestination = Boolean(
+    res.ofereceCasada ||
+      res.cfop === "5923" ||
+      res.modelo5923 ||
+      res.searchedRow.contratoVinculado,
+  );
+
+  if (shouldUseLinkedDestination && res.expedicaoRow) {
+    return { row: res.expedicaoRow, label: "contrato de expedição vinculado" };
+  }
+  if (shouldUseLinkedDestination && linkedRow) {
+    return { row: linkedRow, label: "contrato vinculado localizado no GRL019" };
+  }
+  return { row: res.searchedRow, label: "linha atual" };
+}
+
+function buildCadastroShortcuts(pendencias: string[]) {
+  const text = normalize(pendencias.join(" "));
+  const shortcuts = [
+    { label: "Cadastrar cooperativa", path: "/cadastros/cooperativas", match: ["cooperativa"] },
+    { label: "Cadastrar tipo de contrato", path: "/cadastros/tipos-contrato", match: ["tipo de contrato", "contrato nao parametrizado", "parametrizacao ativa"] },
+    { label: "Cadastrar produto", path: "/cadastros/produtos", match: ["produto", "ncm", "cst"] },
+    { label: "Cadastrar modelo", path: "/cadastros/modelos-nota", match: ["modelo", "cfop"] },
+    { label: "Cadastrar armazém/destinatário", path: "/cadastros/armazens", match: ["armazem", "destinatario", "expedicao vinculada"] },
+  ];
+  return shortcuts.filter((shortcut) => shortcut.match.some((term) => text.includes(term)));
+}
+
 
 function ModeloBadge({ res }: { res: ResolveResult }) {
   if (res.errors.length > 0) return <Badge variant="destructive">Erro param.</Badge>;
