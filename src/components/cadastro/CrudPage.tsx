@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Copy, Plus, Pencil, Trash2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -69,6 +70,8 @@ interface CrudPageProps<T extends { id?: string }> {
   searchKeys: (keyof T)[];
   onSave: (rec: Partial<T>) => Promise<unknown> | void;
   onDelete: (id: string) => Promise<unknown> | void;
+  onDuplicate?: (row: T) => Partial<T>;
+  duplicateTitle?: string;
   tableDensity?: "default" | "compact";
 }
 
@@ -83,10 +86,13 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
   searchKeys,
   onSave,
   onDelete,
+  onDuplicate,
+  duplicateTitle = "Criar regra a partir desta",
   tableDensity = "default",
 }: CrudPageProps<T>) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<T>>(empty);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [q, setQ] = useState("");
   const [delId, setDelId] = useState<string | null>(null);
 
@@ -99,17 +105,30 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
   }, [data, q, searchKeys]);
 
   const openNew = () => {
+    setIsDuplicating(false);
     setForm({ ...empty });
     setOpen(true);
   };
   const openEdit = (row: T) => {
+    setIsDuplicating(false);
     setForm({ ...row });
+    setOpen(true);
+  };
+  const openDuplicate = (row: T) => {
+    if (!onDuplicate) return;
+    setIsDuplicating(true);
+    // Duplicação reaproveita o formulário atual, mas remove o ID para salvar como novo registro.
+    setForm({ ...empty, ...onDuplicate(row) });
     setOpen(true);
   };
 
   const submit = async () => {
-    await onSave(form);
-    setOpen(false);
+    try {
+      await onSave(form);
+      setOpen(false);
+    } catch {
+      // Mutations e validações locais já exibem a mensagem ao usuário; mantém o modal aberto para ajuste.
+    }
   };
 
   const set = (name: string, value: unknown) => setForm((f) => ({ ...f, [name]: value }));
@@ -144,7 +163,9 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
                   {c.label}
                 </TableHead>
               ))}
-              <TableHead className={cn("text-right", isCompactTable ? "h-10 w-20 px-3 py-2" : "w-24")}>
+              <TableHead
+                className={cn("text-right", isCompactTable ? "h-10 px-3 py-2" : "", onDuplicate ? "w-32" : "w-24")}
+              >
                 Ações
               </TableHead>
             </TableRow>
@@ -184,6 +205,21 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
+                      {onDuplicate && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className={cn(isCompactTable && "h-8 w-8")}
+                              onClick={() => openDuplicate(row)}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Criar regra a partir desta</TooltipContent>
+                        </Tooltip>
+                      )}
                       <Button
                         size="icon"
                         variant="ghost"
@@ -204,7 +240,7 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{form.id ? "Editar" : "Novo"} — {title}</DialogTitle>
+            <DialogTitle>{isDuplicating ? duplicateTitle : form.id ? "Editar" : "Novo"} — {title}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {fields.map((f) => {
