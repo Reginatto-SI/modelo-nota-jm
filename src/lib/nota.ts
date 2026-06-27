@@ -194,6 +194,11 @@ function toPositiveNumber(value: unknown): number | null {
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : null;
 }
 
+export function calculateValorUnitarioKg(precoSaca: unknown): number | null {
+  const precoSacaValido = toPositiveNumber(precoSaca);
+  return precoSacaValido == null ? null : precoSacaValido / SACA_KG;
+}
+
 function partyFromCooperativa(cooperativa?: Cooperativa): NotaParty {
   if (!cooperativa) return { ...EMPTY_PARTY };
   return {
@@ -246,6 +251,8 @@ function resolveTipoDestinatario(modelo: ModeloNota, which: CfopModelo) {
 function buildVars(n: Nota, r: ResolveResult): Record<string, string> {
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtUnit = (v: number) =>
+    v.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 6 });
   const manual = (value: string | null | undefined, placeholder: string) => {
     const text = (value ?? "").toString().trim();
     return text || placeholder;
@@ -326,7 +333,7 @@ function buildVars(n: Nota, r: ResolveResult): Record<string, string> {
     unidade: ph(n.produto.unidade),
     natureza_operacao: ph(n.naturezaOperacao),
     quantidade: fmt(n.quantidade),
-    valor_unitario: fmt(n.valorUnitario),
+    valor_unitario: fmtUnit(n.valorUnitario),
     valor_total: fmt(n.valorTotal),
     placa_cavalo: manual(n.placaVeiculo, "########"),
     motorista_nome: "########",
@@ -377,14 +384,21 @@ export function hasPendingPlaceholders(text: string): boolean {
 
 export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNota): Nota {
   const rec = r.recebimentoRow ?? r.searchedRow;
-  const precoSaca = rec.precoUnitIcms || 0;
+  const precoSaca = toPositiveNumber(rec.precoUnitIcms);
   const quantidade = toPositiveNumber(modelo.quantidade_padrao) ?? QUANTIDADE_PADRAO;
+  const valorUnitarioGrl019 = calculateValorUnitarioKg(precoSaca);
   const valorTotalPadrao = toPositiveNumber(modelo.valor_total_padrao);
   const valorUnitarioPadrao = toPositiveNumber(modelo.valor_unitario_padrao);
-  const valorUnitario = valorTotalPadrao != null
-    ? valorTotalPadrao / quantidade
-    : valorUnitarioPadrao ?? precoSaca / SACA_KG;
-  const valorTotal = valorTotalPadrao ?? quantidade * valorUnitario;
+  // Prioridade financeira: preço da saca do GRL019 sempre prevalece; valores do modelo são apenas fallback.
+  const valorUnitario = valorUnitarioGrl019 ?? valorUnitarioPadrao ?? (valorTotalPadrao != null ? valorTotalPadrao / quantidade : 0);
+  const valorTotal = quantidade * valorUnitario;
+  if (valorUnitarioGrl019 == null) {
+    r.warnings.push(
+      valorUnitario > 0
+        ? "Preço da saca não localizado no GRL019. Valor inicial calculado pelo fallback financeiro do modelo."
+        : "Preço da saca não localizado no GRL019. Informe o valor unitário manualmente antes de gerar o PDF.",
+    );
+  }
   // CST exibida no PDF: prioridade para o Modelo de Nota/CFOP; se vazio, mantém o fallback do produto.
   const cstIcmsPdf = modelo.cst_icms_padrao?.trim() || r.produto?.cst_icms?.trim() || "";
 

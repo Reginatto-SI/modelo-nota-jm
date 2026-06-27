@@ -4,6 +4,8 @@ import type { Nota, NotaParty } from "./nota";
 
 const BRL = (v: number) =>
   "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const BRL_UNIT = (v: number) =>
+  "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 6 });
 const NUM = (v: number) =>
   v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const BLUE: [number, number, number] = [235, 240, 247];
@@ -358,7 +360,7 @@ function drawProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
       valueOrDash(nota.cfop),
       valueOrDash(nota.produto.unidade),
       NUM(nota.quantidade),
-      BRL(nota.valorUnitario),
+      BRL_UNIT(nota.valorUnitario),
       BRL(nota.valorTotal),
       "0,00",
       "0,00",

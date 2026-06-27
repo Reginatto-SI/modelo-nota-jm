@@ -32,12 +32,6 @@ export function formatCurrencyBR(value: number): string {
 
 export function formatUnitValueBR(value: number): string {
   if (!Number.isFinite(value)) return "";
-  const decimals = Math.min(8, Math.max(2, neededDecimals(value, 8)));
-  return formatDecimalBR(value, decimals);
-}
-
-function neededDecimals(value: number, maxDecimals: number): number {
-  const fixed = value.toFixed(maxDecimals);
-  const [, decimal = ""] = fixed.split(".");
-  return decimal.replace(/0+$/, "").length;
+  // Valor unitário por KG precisa manter precisão visual fixa na prévia/PDF.
+  return formatDecimalBR(value, 6);
 }
