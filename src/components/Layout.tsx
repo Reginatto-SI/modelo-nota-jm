@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import {
   Home,
   Upload,
@@ -9,9 +9,14 @@ import {
   Package,
   FileText,
   ScrollText,
+  LogOut,
+  LockKeyhole,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { isJmAuthenticated, logoutJmAccess, subscribeJmAccessChanged } from "@/lib/jmAccess";
+import { toast } from "sonner";
 
 const nav = [
   { to: "/", label: "Início", icon: Home, end: true },
@@ -50,6 +55,20 @@ function Item({ to, label, icon: Icon, end }: { to: string; label: string; icon:
 
 export function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const [jmAuthenticated, setJmAuthenticated] = useState(() => isJmAuthenticated());
+
+  useEffect(() => subscribeJmAccessChanged(() => setJmAuthenticated(isJmAuthenticated())), []);
+
+  // Caminho visual discreto para a equipe JM abrir o guard sem expor o menu de cadastros ao público.
+  const handleOpenJmAccess = () => navigate("/cadastros/cooperativas");
+
+  // Opção discreta para encerrar a sessão JM salva no sessionStorage.
+  const handleLogoutJm = () => {
+    logoutJmAccess();
+    setJmAuthenticated(false);
+    toast.success("Acesso JM encerrado.");
+  };
+
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="hidden w-64 shrink-0 flex-col bg-sidebar p-4 md:flex">
@@ -67,17 +86,47 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="mt-6 mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
-          Cadastros
-        </div>
-        <nav className="flex flex-col gap-1">
-          {cadastros.map((n) => (
-            <Item key={n.to} {...n} />
-          ))}
-        </nav>
+        {jmAuthenticated && (
+          <>
+            {/* Cadastros ficam visíveis apenas após liberar o acesso JM; as rotas seguem protegidas no App. */}
+            <div className="mt-6 mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+              Cadastros
+            </div>
+            <nav className="flex flex-col gap-1">
+              {cadastros.map((n) => (
+                <Item key={n.to} {...n} />
+              ))}
+            </nav>
+          </>
+        )}
 
-        <div className="mt-auto px-3 pt-6 text-xs text-sidebar-foreground/50">
-          Documento orientativo. Sem validade fiscal.
+        <div className="mt-auto space-y-3 px-3 pt-6">
+          {jmAuthenticated ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-auto w-full justify-start px-0 text-xs text-sidebar-foreground/60 hover:bg-transparent hover:text-sidebar-foreground"
+              onClick={handleLogoutJm}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sair do acesso JM
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-auto w-full justify-start px-0 text-xs text-sidebar-foreground/60 hover:bg-transparent hover:text-sidebar-foreground"
+              onClick={handleOpenJmAccess}
+            >
+              <LockKeyhole className="h-3.5 w-3.5" />
+              Acesso JM
+            </Button>
+          )}
+          <div className="text-xs text-sidebar-foreground/50">
+            Documento orientativo. Sem validade fiscal.
+          </div>
         </div>
       </aside>
 
@@ -85,6 +134,15 @@ export function Layout({ children }: { children: ReactNode }) {
         <header className="flex items-center gap-3 border-b bg-card px-4 py-3 md:hidden">
           <Logo size={32} />
           <span className="font-bold text-foreground">Modelo de Nota JM</span>
+          {jmAuthenticated ? (
+            <Button type="button" variant="ghost" size="sm" className="ml-auto text-xs" onClick={handleLogoutJm}>
+              Sair JM
+            </Button>
+          ) : (
+            <Button type="button" variant="ghost" size="sm" className="ml-auto text-xs" onClick={handleOpenJmAccess}>
+              Acesso JM
+            </Button>
+          )}
         </header>
         <div className="mx-auto max-w-6xl animate-fade-in p-4 md:p-8">{children}</div>
       </main>

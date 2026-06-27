@@ -14,6 +14,7 @@ import Produtos from "./pages/cadastros/Produtos.tsx";
 import TiposContrato from "./pages/cadastros/TiposContrato.tsx";
 import ModelosNota from "./pages/cadastros/ModelosNota.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import { JmAccessGuard } from "./components/JmAccessGuard.tsx";
 
 const queryClient = new QueryClient();
 
@@ -29,11 +30,11 @@ const App = () => (
             <Route path="/importar" element={<Importar />} />
             <Route path="/pesquisa" element={<Pesquisa />} />
             <Route path="/preview" element={<Preview />} />
-            <Route path="/cadastros/cooperativas" element={<Cooperativas />} />
-            <Route path="/cadastros/armazens" element={<Armazens />} />
-            <Route path="/cadastros/produtos" element={<Produtos />} />
-            <Route path="/cadastros/tipos-contrato" element={<TiposContrato />} />
-            <Route path="/cadastros/modelos-nota" element={<ModelosNota />} />
+            <Route path="/cadastros/cooperativas" element={<JmAccessGuard><Cooperativas /></JmAccessGuard>} />
+            <Route path="/cadastros/armazens" element={<JmAccessGuard><Armazens /></JmAccessGuard>} />
+            <Route path="/cadastros/produtos" element={<JmAccessGuard><Produtos /></JmAccessGuard>} />
+            <Route path="/cadastros/tipos-contrato" element={<JmAccessGuard><TiposContrato /></JmAccessGuard>} />
+            <Route path="/cadastros/modelos-nota" element={<JmAccessGuard><ModelosNota /></JmAccessGuard>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
