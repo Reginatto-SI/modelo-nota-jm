@@ -169,6 +169,7 @@ export type Database = {
           created_at: string
           cst_icms_padrao: string | null
           dados_adicionais_template: string | null
+          fator_conversao_dolar: number | null
           id: string
           natureza_operacao: string | null
           nome_modelo: string
@@ -186,6 +187,7 @@ export type Database = {
           created_at?: string
           cst_icms_padrao?: string | null
           dados_adicionais_template?: string | null
+          fator_conversao_dolar?: number | null
           id?: string
           natureza_operacao?: string | null
           nome_modelo: string
@@ -203,6 +205,7 @@ export type Database = {
           created_at?: string
           cst_icms_padrao?: string | null
           dados_adicionais_template?: string | null
+          fator_conversao_dolar?: number | null
           id?: string
           natureza_operacao?: string | null
           nome_modelo?: string

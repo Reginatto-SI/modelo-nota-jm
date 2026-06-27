@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNota, buildNotaPdfFileName, calculateValorUnitarioKg, syncPlacaCavaloPlaceholder } from "./nota";
+import { buildNota, buildNotaPdfFileName, calculateValorUnitarioKg, isMoedaDolar, syncPlacaCavaloPlaceholder } from "./nota";
 import { TIPO_FRETE_DEFAULT } from "./tipoFrete";
 import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "./numberFormat";
 import type { Cooperativa, Grl019Row, ModeloNota, Produto } from "./types";
@@ -22,6 +22,7 @@ const row: Grl019Row = {
   codItem: "SOJA",
   descItem: "Soja",
   precoUnitIcms: 120,
+  moeda: "R$",
   tpFrete: "9 - Sem cobrança de frete",
   observacao: "",
   _raw: {},
@@ -69,6 +70,7 @@ const modeloBase: ModeloNota = {
   quantidade_padrao: null,
   valor_unitario_padrao: null,
   valor_total_padrao: null,
+  fator_conversao_dolar: null,
   dados_adicionais_template: null,
   ativo: true,
   created_at: "",
@@ -99,6 +101,43 @@ describe("buildNota", () => {
     const nota = buildNota(resolveResult(), "5118", modeloBase);
 
     expect(nota.quantidade).toBe(30000);
+    expect(nota.valorUnitario).toBe(2);
+    expect(nota.valorTotal).toBe(60000);
+  });
+
+  it("converte preço da saca em dólar pelo fator configurado antes de calcular por KG", () => {
+    const dolarRow = { ...row, precoUnitIcms: 12, moeda: "US$" };
+    const nota = buildNota({ ...resolveResult(), searchedRow: dolarRow, recebimentoRow: dolarRow, warnings: [] }, "5118", {
+      ...modeloBase,
+      fator_conversao_dolar: 4,
+    });
+
+    expect(nota.valorUnitario).toBe(0.8);
+    expect(nota.valorTotal).toBe(24000);
+  });
+
+  it("alerta e bloqueia valor automático quando o contrato é dólar sem fator configurado", () => {
+    const warnings: string[] = [];
+    const dolarRow = { ...row, precoUnitIcms: 12, moeda: "USD" };
+    const nota = buildNota({ ...resolveResult(), searchedRow: dolarRow, recebimentoRow: dolarRow, warnings }, "5118", modeloBase);
+
+    expect(nota.valorUnitario).toBe(0);
+    expect(nota.requiresManualValorUnitario).toBe(true);
+    expect(warnings).toContain("Contrato em dólar localizado no GRL019, mas o modelo não possui fator de conversão configurado. Informe o fator na aba Dados financeiros ou ajuste o valor unitário manualmente.");
+  });
+
+  it("identifica variações simples de moeda em dólar", () => {
+    expect(isMoedaDolar("US$")).toBe(true);
+    expect(isMoedaDolar("USD")).toBe(true);
+    expect(isMoedaDolar("DÓLAR")).toBe(true);
+    expect(isMoedaDolar("R$")).toBe(false);
+  });
+
+  it("trata relatório antigo sem moeda como real sem quebrar o cálculo", () => {
+    const rowSemMoeda = { ...row };
+    delete rowSemMoeda.moeda;
+    const nota = buildNota({ ...resolveResult(), searchedRow: rowSemMoeda, recebimentoRow: rowSemMoeda, warnings: [] }, "5118", modeloBase);
+
     expect(nota.valorUnitario).toBe(2);
     expect(nota.valorTotal).toBe(60000);
   });

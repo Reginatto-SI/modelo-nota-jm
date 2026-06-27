@@ -230,6 +230,7 @@ export const useModelos = () =>
         quantidade_padrao: normalizePositiveDecimal((m as { quantidade_padrao?: unknown }).quantidade_padrao),
         valor_unitario_padrao: normalizePositiveDecimal((m as { valor_unitario_padrao?: unknown }).valor_unitario_padrao),
         valor_total_padrao: normalizePositiveDecimal((m as { valor_total_padrao?: unknown }).valor_total_padrao),
+        fator_conversao_dolar: normalizePositiveDecimal((m as { fator_conversao_dolar?: unknown }).fator_conversao_dolar),
         // Fallback ao legado cooperativa_id quando não houver vínculos migrados.
         cooperativa_ids:
           porModelo.get(m.id) ?? (m.cooperativa_id ? [m.cooperativa_id] : []),
@@ -252,6 +253,7 @@ export const useSaveModelo = () => {
         quantidade_padrao: normalizePositiveDecimal(modeloFields.quantidade_padrao),
         valor_unitario_padrao: normalizePositiveDecimal(modeloFields.valor_unitario_padrao),
         valor_total_padrao: normalizePositiveDecimal(modeloFields.valor_total_padrao),
+        fator_conversao_dolar: normalizePositiveDecimal(modeloFields.fator_conversao_dolar),
         cooperativa_id: liberadas[0] ?? null,
       };
 
