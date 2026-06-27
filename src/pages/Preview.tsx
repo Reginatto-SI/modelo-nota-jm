@@ -10,21 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, AlertTriangle } from "lucide-react";
 import type { Nota } from "@/lib/nota";
-import { buildNotaPdfFileName, getPendingPlaceholders, syncPlacaCavaloPlaceholder } from "@/lib/nota";
+import { buildNotaPdfFileName, syncPlacaCavaloPlaceholder } from "@/lib/nota";
 import { generatePdf } from "@/lib/pdf";
 import { TIPO_FRETE_OPTIONS, normalizeTipoFrete } from "@/lib/tipoFrete";
 import { toast } from "sonner";
 import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "@/lib/numberFormat";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 export default function Preview() {
   const location = useLocation();
@@ -33,7 +23,6 @@ export default function Preview() {
   const [notas, setNotas] = useState<Nota[]>(() =>
     (state?.notas ?? []).map((nota) => ({ ...nota, tpFrete: normalizeTipoFrete(nota.tpFrete) })),
   );
-  const [confirmPlaceholdersOpen, setConfirmPlaceholdersOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   if (!state || notas.length === 0) return <Navigate to="/pesquisa" replace />;
@@ -67,10 +56,6 @@ export default function Preview() {
     });
   };
 
-  const pendenciasPlaceholders = notas.flatMap((nota) =>
-    getPendingPlaceholders(nota.dadosAdicionais).map((placeholder) => `CFOP ${nota.cfop}: ${placeholder}`),
-  );
-
   const gerarPdfConfirmado = () => {
     if (notas.some((n) => n.valorUnitario <= 0 || n.valorTotal <= 0)) {
       return toast.error("Preço da saca não localizado no GRL019. Informe o valor unitário manualmente antes de gerar o PDF.");
@@ -80,16 +65,7 @@ export default function Preview() {
     }
     // Cada aba/modelo vira um PDF próprio; não une CFOPs diferentes no mesmo arquivo.
     notas.forEach((nota) => generatePdf([nota], buildNotaPdfFileName(nota)));
-    setConfirmPlaceholdersOpen(false);
     toast.success(notas.length > 1 ? "PDFs gerados separadamente." : "PDF gerado.");
-  };
-
-  const gerarPdf = () => {
-    if (pendenciasPlaceholders.length > 0) {
-      setConfirmPlaceholdersOpen(true);
-      return;
-    }
-    gerarPdfConfirmado();
   };
 
   return (
@@ -102,7 +78,7 @@ export default function Preview() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => navigate("/pesquisa")}>Voltar</Button>
-            <Button onClick={gerarPdf}><Download className="mr-1 h-4 w-4" /> Gerar PDF</Button>
+            <Button onClick={gerarPdfConfirmado}><Download className="mr-1 h-4 w-4" /> Gerar PDF</Button>
           </div>
         </div>
 
@@ -199,30 +175,6 @@ export default function Preview() {
         </Tabs>
       </div>
 
-      <AlertDialog open={confirmPlaceholdersOpen} onOpenChange={setConfirmPlaceholdersOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Existem placeholders pendentes</AlertDialogTitle>
-            <AlertDialogDescription>
-              Revise os dados adicionais antes de gerar o PDF orientativo. Se estes placeholders forem intencionais,
-              confirme conscientemente a geração.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="max-h-56 overflow-y-auto rounded-md border bg-muted/30 p-3 text-sm">
-            <ul className="list-disc space-y-1 pl-5">
-              {pendenciasPlaceholders.map((placeholder) => (
-                <li key={placeholder} className="font-mono text-xs">
-                  {placeholder}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Voltar e revisar</AlertDialogCancel>
-            <AlertDialogAction onClick={gerarPdfConfirmado}>Gerar mesmo assim</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Layout>
   );
 }
