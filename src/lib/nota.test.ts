@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNota, buildNotaPdfFileName, calculateValorUnitarioKg, isMoedaDolar, syncPlacaCavaloPlaceholder } from "./nota";
+import { buildNota, buildNotaPdfFileName, calculateCurrencyValues, calculateValorUnitarioKg, isMoedaDolar, normalizeMoeda, syncPlacaCavaloPlaceholder } from "./nota";
 import { TIPO_FRETE_DEFAULT } from "./tipoFrete";
 import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "./numberFormat";
 import type { Cooperativa, Grl019Row, ModeloNota, Produto } from "./types";
@@ -116,14 +116,15 @@ describe("buildNota", () => {
     expect(nota.valorTotal).toBe(24000);
   });
 
-  it("alerta e bloqueia valor automático quando o contrato é dólar sem fator configurado", () => {
+  it("usa fallback centralizado quando o contrato é dólar sem fator configurado", () => {
     const warnings: string[] = [];
     const dolarRow = { ...row, precoUnitIcms: 12, moeda: "USD" };
     const nota = buildNota({ ...resolveResult(), searchedRow: dolarRow, recebimentoRow: dolarRow, warnings }, "5118", modeloBase);
 
-    expect(nota.valorUnitario).toBe(0);
-    expect(nota.requiresManualValorUnitario).toBe(true);
-    expect(warnings).toContain("Contrato em dólar localizado no GRL019, mas o modelo não possui fator de conversão configurado. Informe o fator na aba Dados financeiros ou ajuste o valor unitário manualmente.");
+    expect(nota.valorUnitario).toBe(0.8);
+    expect(nota.valorTotal).toBe(24000);
+    expect(nota.requiresManualValorUnitario).toBe(false);
+    expect(warnings).toContain("Contrato em dólar sem fator de conversão configurado no modelo. O sistema aplicou temporariamente o fator padrão 4,00. Revise antes de gerar o PDF.");
   });
 
   it("identifica variações simples de moeda em dólar", () => {
@@ -131,6 +132,22 @@ describe("buildNota", () => {
     expect(isMoedaDolar("USD")).toBe(true);
     expect(isMoedaDolar("DÓLAR")).toBe(true);
     expect(isMoedaDolar("R$")).toBe(false);
+    expect(normalizeMoeda("USD")).toBe("USD");
+    expect(normalizeMoeda("DOLAR")).toBe("USD");
+    expect(normalizeMoeda("DÓLAR")).toBe("USD");
+  });
+
+  it("centraliza cálculo financeiro de real e dólar", () => {
+    const real = calculateCurrencyValues({ precoSaca: 7.1, moeda: "R$", quantidadeKg: 30000, fatorDolar: 4 });
+    const dolar = calculateCurrencyValues({ precoSaca: 7.1, moeda: "US$", quantidadeKg: 30000, fatorDolar: 4 });
+
+    expect(real?.fatorConversao).toBe(1);
+    expect(real?.origemFatorConversao).toBe("não aplicável");
+    expect(real?.valorUnitarioKg).toBeCloseTo(7.1 / 60);
+    expect(dolar?.fatorConversao).toBe(4);
+    expect(dolar?.origemFatorConversao).toBe("modelo");
+    expect(dolar?.precoSacaConvertido).toBe(28.4);
+    expect(dolar?.valorUnitarioKg).toBeCloseTo(28.4 / 60);
   });
 
   it("trata relatório antigo sem moeda como real sem quebrar o cálculo", () => {
