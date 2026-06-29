@@ -8,9 +8,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, AlertTriangle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Download } from "lucide-react";
 import type { Nota } from "@/lib/nota";
-import { buildNotaPdfFileName, syncPlacaCavaloPlaceholder } from "@/lib/nota";
+import { buildNotaPdfFileName, getPendingPlaceholders, syncPlacaCavaloPlaceholder } from "@/lib/nota";
 import { generatePdf } from "@/lib/pdf";
 import { TIPO_FRETE_OPTIONS, normalizeTipoFrete } from "@/lib/tipoFrete";
 import { toast } from "sonner";
@@ -24,6 +34,7 @@ export default function Preview() {
     (state?.notas ?? []).map((nota) => ({ ...nota, tpFrete: normalizeTipoFrete(nota.tpFrete) })),
   );
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [pendingConfirmWarnings, setPendingConfirmWarnings] = useState<string[]>([]);
 
   if (!state || notas.length === 0) return <Navigate to="/pesquisa" replace />;
 
@@ -56,16 +67,55 @@ export default function Preview() {
     });
   };
 
-  const gerarPdfConfirmado = () => {
-    if (notas.some((n) => n.valorUnitario <= 0 || n.valorTotal <= 0)) {
-      return toast.error("Preço da saca não localizado no GRL019. Informe o valor unitário manualmente antes de gerar o PDF.");
-    }
-    if (notas.some((n) => n.quantidade <= 0)) {
-      return toast.error("Quantidade deve ser maior que zero.");
-    }
+  const gerarPdfs = () => {
     // Cada aba/modelo vira um PDF próprio; não une CFOPs diferentes no mesmo arquivo.
     notas.forEach((nota) => generatePdf([nota], buildNotaPdfFileName(nota)));
     toast.success(notas.length > 1 ? "PDFs gerados separadamente." : "PDF gerado.");
+  };
+
+  const getAvisosConferencia = () => {
+    // Mantém as validações preventivas fora da renderização fixa e leva a conferência para o momento da ação.
+    const avisos = [
+      ...(state.warnings ?? []),
+      ...notas.flatMap((nota) =>
+        getPendingPlaceholders(nota.dadosAdicionais).map(
+          (placeholder) => `Modelo CFOP ${nota.cfop}: placeholder pendente em dados adicionais (${placeholder}).`,
+        ),
+      ),
+    ];
+    return Array.from(new Set(avisos));
+  };
+
+  const gerarPdfConfirmado = () => {
+    const primeiraNotaSemQuantidade = notas.find((n) => n.quantidade <= 0);
+    if (primeiraNotaSemQuantidade) {
+      return toast.error(`Modelo CFOP ${primeiraNotaSemQuantidade.cfop}: quantidade deve ser maior que zero.`);
+    }
+    const primeiraNotaSemValorUnitario = notas.find((n) => n.valorUnitario <= 0);
+    if (primeiraNotaSemValorUnitario) {
+      return toast.error(`Modelo CFOP ${primeiraNotaSemValorUnitario.cfop}: informe valor unitário válido antes de gerar o PDF.`);
+    }
+    const primeiraNotaSemValorTotal = notas.find((n) => n.valorTotal <= 0);
+    if (primeiraNotaSemValorTotal) {
+      return toast.error(`Modelo CFOP ${primeiraNotaSemValorTotal.cfop}: informe valor total válido antes de gerar o PDF.`);
+    }
+    const primeiraNotaSemProdutoFiscal = notas.find((n) => !n.produto.ncm?.trim() || !n.produto.cst?.trim());
+    if (primeiraNotaSemProdutoFiscal) {
+      return toast.error(`Modelo CFOP ${primeiraNotaSemProdutoFiscal.cfop}: produto/modelo sem NCM ou CST. Revise o cadastro antes de gerar o PDF.`);
+    }
+
+    const avisosConferencia = getAvisosConferencia();
+    if (avisosConferencia.length > 0) {
+      setPendingConfirmWarnings(avisosConferencia);
+      return;
+    }
+
+    gerarPdfs();
+  };
+
+  const gerarMesmoAssim = () => {
+    setPendingConfirmWarnings([]);
+    gerarPdfs();
   };
 
   return (
@@ -81,18 +131,6 @@ export default function Preview() {
             <Button onClick={gerarPdfConfirmado}><Download className="mr-1 h-4 w-4" /> Gerar PDF</Button>
           </div>
         </div>
-
-        {state.warnings?.length > 0 && (
-          <Card className="border-warning/40 bg-warning/10">
-            <CardContent className="space-y-1 py-3 text-sm">
-              {state.warnings.map((w, i) => (
-                <div key={i} className="flex items-center gap-2 text-warning-foreground">
-                  <AlertTriangle className="h-4 w-4 text-warning" /> {w}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
 
         <Tabs defaultValue="0">
           <TabsList>
@@ -175,6 +213,25 @@ export default function Preview() {
         </Tabs>
       </div>
 
+      <AlertDialog open={pendingConfirmWarnings.length > 0} onOpenChange={(open) => !open && setPendingConfirmWarnings([])}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Conferir antes de gerar PDF</AlertDialogTitle>
+            <AlertDialogDescription>
+              Existem pendências ou avisos para revisão antes da geração do PDF.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="max-h-64 list-disc space-y-1 overflow-y-auto pl-5 text-sm text-muted-foreground">
+            {pendingConfirmWarnings.map((warning, index) => (
+              <li key={`${warning}-${index}`}>{warning}</li>
+            ))}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={gerarMesmoAssim}>Gerar mesmo assim</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }
