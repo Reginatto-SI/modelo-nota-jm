@@ -50,8 +50,16 @@ function norm(s: string | null | undefined) {
   return (s ?? "").trim().toLowerCase();
 }
 
+export function normalizeContractCode(value: unknown) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
 function sameText(a: string | null | undefined, b: string | null | undefined) {
   return norm(a) === norm(b);
+}
+
+function sameContractCode(a: unknown, b: unknown) {
+  return normalizeContractCode(a) === normalizeContractCode(b);
 }
 
 function coopDisplayName(cooperativa?: Cooperativa, fallback?: string) {
@@ -90,7 +98,7 @@ function findTiposAtivos(tipos: TipoContrato[], cooperativaId: string, row: Grl0
     (t) =>
       t.ativo &&
       t.cooperativa_id === cooperativaId &&
-      sameText(t.codigo_contrato, row.codContrato) &&
+      sameContractCode(t.codigo_contrato, row.codContrato) &&
       sameText(t.tp_faturamento, row.tpFaturamento),
   );
 }

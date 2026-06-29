@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Copy, Plus, Pencil, Trash2, Search } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,6 +74,8 @@ interface CrudPageProps<T extends { id?: string }> {
   onDuplicate?: (row: T) => Partial<T>;
   duplicateTitle?: string;
   tableDensity?: "default" | "compact";
+  filterControls?: ReactNode;
+  showSearch?: boolean;
 }
 
 export function CrudPage<T extends { id?: string; ativo?: boolean }>({
@@ -89,6 +92,8 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
   onDuplicate,
   duplicateTitle = "Criar regra a partir desta",
   tableDensity = "default",
+  filterControls,
+  showSearch = true,
 }: CrudPageProps<T>) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<T>>(empty);
@@ -146,10 +151,17 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
         </Button>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar..." className="pl-9" />
-      </div>
+      {(showSearch || filterControls) && (
+        <div className="space-y-3">
+          {showSearch && (
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar..." className="pl-9" />
+            </div>
+          )}
+          {filterControls}
+        </div>
+      )}
 
       <div className="rounded-lg border bg-card shadow-card">
         <Table>
