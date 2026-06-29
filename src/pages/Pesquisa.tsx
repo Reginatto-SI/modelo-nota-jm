@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,12 +56,20 @@ function smartSearchMatches(row: Grl019Row, term: string) {
     Boolean(digitTerm && digits(row.cpfCnpj).includes(digitTerm));
 }
 
+function isBuscaContratoExato(row: Grl019Row, term: string) {
+  const normalizedTerm = normalize(term);
+  if (!normalizedTerm || !digits(normalizedTerm)) return false;
+  // Permite exceção apenas quando o usuário digitou exatamente o número/texto do contrato da linha.
+  return normalize(row.contrato) === normalizedTerm;
+}
+
 export default function Pesquisa() {
   const navigate = useNavigate();
   const { report } = useReport();
   const [q, setQ] = useState("");
   const [dialog, setDialog] = useState<ResolveResult | null>(null);
   const [details, setDetails] = useState<ResolveResult | null>(null);
+  const [mostrarAuxiliares, setMostrarAuxiliares] = useState(false);
 
   const { data: cooperativas = [] } = useCooperativas();
   const { data: armazens = [] } = useArmazens();
@@ -72,18 +81,19 @@ export default function Pesquisa() {
     [cooperativas, armazens, produtos, modelos, tipos],
   );
 
-  const visibleRows = useMemo(() => {
-    if (!report) return [];
-    return report.rows
-      .filter((row) => smartSearchMatches(row, q))
-      .slice(0, 50);
-  }, [report, q]);
-
   const resolvedRows = useMemo(() => {
     if (!report) return [];
-    // Resolve apenas os registros que serão renderizados para evitar cálculos repetidos na filtragem e no JSX.
-    return visibleRows.map((row) => ({ row, res: resolveContrato(report, row, cad) }));
-  }, [cad, report, visibleRows]);
+    // Reaproveita a classificação centralizada da resolução para ocultar somente linhas auxiliares/vinculadas.
+    return report.rows
+      .filter((row) => smartSearchMatches(row, q))
+      .map((row) => ({ row, res: resolveContrato(report, row, cad) }))
+      .filter(({ row, res }) => mostrarAuxiliares || !isContratoAuxiliar(res) || isBuscaContratoExato(row, q))
+      .slice(0, 50);
+  }, [cad, mostrarAuxiliares, report, q]);
+
+  const exibindoAuxiliarPorBuscaExata = resolvedRows.some(
+    ({ row, res }) => !mostrarAuxiliares && isContratoAuxiliar(res) && isBuscaContratoExato(row, q),
+  );
 
   if (!report) {
     return (
@@ -156,14 +166,25 @@ export default function Pesquisa() {
           </p>
         </div>
 
-        <div className="relative max-w-2xl">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Pesquisar contrato, agricultor ou CPF/CNPJ..."
-            className="pl-9"
-          />
+        <div className="flex max-w-2xl flex-col gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Pesquisar contrato, agricultor ou CPF/CNPJ..."
+              className="pl-9"
+            />
+          </div>
+          <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+            <Switch checked={mostrarAuxiliares} onCheckedChange={setMostrarAuxiliares} />
+            Mostrar contratos vinculados/auxiliares
+          </label>
+          {exibindoAuxiliarPorBuscaExata && (
+            <p className="text-xs text-muted-foreground">
+              Este contrato é auxiliar/vinculado. Para gerar o modelo, use o contrato de recebimento vinculado.
+            </p>
+          )}
         </div>
 
         <div className="overflow-x-auto rounded-lg border bg-card shadow-card">
@@ -565,6 +586,11 @@ function buildCadastroShortcuts(pendencias: string[]) {
   return shortcuts.filter((shortcut) => shortcut.match.some((term) => text.includes(term)));
 }
 
+
+function isContratoAuxiliar(res: ResolveResult) {
+  // Mantém a mesma regra visual/operacional já usada para trocar "Gerar Modelo" por "Ver recebimento".
+  return res.expedicaoVinculadaRecebimento;
+}
 
 function ModeloBadge({ res }: { res: ResolveResult }) {
   if (res.errors.length > 0) return <Badge variant="destructive">Erro param.</Badge>;
