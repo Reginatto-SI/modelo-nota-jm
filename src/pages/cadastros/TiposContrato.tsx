@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { CrudPage, AtivoBadge, type FieldDef, type ColumnDef } from "@/components/cadastro/CrudPage";
 import {
@@ -8,7 +9,27 @@ import {
   useModelos,
 } from "@/lib/db";
 import type { TipoContrato } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+
+export const normalizeContractCode = (value: unknown) => String(value ?? "").trim().toUpperCase();
+const normalizeText = (value: unknown) => String(value ?? "").trim().toUpperCase();
+
+export function hasDuplicateTipoContrato(data: TipoContrato[], record: Partial<TipoContrato>) {
+  // A chave de duplicidade segue a mesma chave lógica usada pela resolução da /pesquisa.
+  return data.some((item) => {
+    const mesmoRegistro = record.id && item.id === record.id;
+    return (
+      !mesmoRegistro &&
+      item.cooperativa_id === record.cooperativa_id &&
+      normalizeContractCode(item.codigo_contrato) === normalizeContractCode(record.codigo_contrato) &&
+      normalizeText(item.tp_faturamento) === normalizeText(record.tp_faturamento)
+    );
+  });
+}
 
 export default function TiposContrato() {
   const { data: coops = [] } = useCooperativas();
@@ -16,6 +37,9 @@ export default function TiposContrato() {
   const { data = [], isLoading } = useTiposContrato();
   const save = useSaveTipoContrato();
   const del = useDeleteTipoContrato();
+  const [coopFilter, setCoopFilter] = useState("todas");
+  const [contractFilter, setContractFilter] = useState("");
+  const [tpFilter, setTpFilter] = useState("todos");
 
   const fields: FieldDef[] = [
     {
@@ -63,7 +87,26 @@ export default function TiposContrato() {
     { key: "ativo", label: "Status", render: (r) => <AtivoBadge ativo={r.ativo} /> },
   ];
 
-  const normalize = (value: unknown) => String(value ?? "").trim().toUpperCase();
+  const filteredData = useMemo(() => {
+    const term = normalizeContractCode(contractFilter);
+
+    return data.filter((item) => {
+      const matchesCoop = coopFilter === "todas" || item.cooperativa_id === coopFilter;
+      const matchesTp = tpFilter === "todos" || normalizeText(item.tp_faturamento) === tpFilter;
+      const matchesContract =
+        !term ||
+        normalizeContractCode(item.codigo_contrato).includes(term) ||
+        normalizeText(item.descricao_contrato).includes(term);
+
+      return matchesCoop && matchesTp && matchesContract;
+    });
+  }, [contractFilter, coopFilter, data, tpFilter]);
+
+  const clearFilters = () => {
+    setCoopFilter("todas");
+    setContractFilter("");
+    setTpFilter("todos");
+  };
 
   const saveTipoContrato = async (record: Partial<TipoContrato>) => {
     if (!record.cooperativa_id) {
@@ -71,19 +114,11 @@ export default function TiposContrato() {
       throw new Error("Cooperativa de destino não selecionada.");
     }
 
-    const duplicado = data.some((item) => {
-      const mesmoRegistro = record.id && item.id === record.id;
-      return (
-        !mesmoRegistro &&
-        item.cooperativa_id === record.cooperativa_id &&
-        normalize(item.codigo_contrato) === normalize(record.codigo_contrato) &&
-        item.modelo_nota_id === record.modelo_nota_id
-      );
-    });
+    const duplicado = hasDuplicateTipoContrato(data, record);
 
     if (duplicado) {
-      toast.error("Já existe uma regra cadastrada para esta cooperativa, código e modelo.");
-      throw new Error("Regra duplicada para cooperativa, código e modelo.");
+      toast.error("Já existe uma regra cadastrada para esta cooperativa, código e tipo de faturamento.");
+      throw new Error("Regra duplicada para cooperativa, código e tipo de faturamento.");
     }
 
     await save.mutateAsync(record);
@@ -108,12 +143,62 @@ export default function TiposContrato() {
       <CrudPage
         title="Tipos de Contrato"
         description="Parametrização por cooperativa. O CFOP correto é definido aqui, não pela descrição do GRL019."
-        data={data}
+        data={filteredData}
         loading={isLoading}
         fields={fields}
         columns={columns}
         empty={{ ativo: true, exige_contrato_vinculado: false, gera_operacao_casada: false }}
         searchKeys={["codigo_contrato", "descricao_contrato"]}
+        showSearch={false}
+        filterControls={
+          <div className="rounded-lg border bg-card p-4 shadow-card">
+            <div className="grid gap-3 md:grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_minmax(160px,0.7fr)_auto] md:items-end">
+              <div className="space-y-1.5">
+                <Label>Cooperativa</Label>
+                <Select value={coopFilter} onValueChange={setCoopFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as cooperativas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas as cooperativas</SelectItem>
+                    {coops.map((coop) => (
+                      <SelectItem key={coop.id} value={coop.id}>
+                        {coop.razao_social || coop.nome_grl019 || coop.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Tipo de contrato</Label>
+                <Input
+                  value={contractFilter}
+                  onChange={(event) => setContractFilter(event.target.value)}
+                  placeholder="Buscar código ou descrição"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>TP Faturamento</Label>
+                <Select value={tpFilter} onValueChange={setTpFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="RECEBIMENTO">RECEBIMENTO</SelectItem>
+                    <SelectItem value="EXPEDIÇÃO">EXPEDIÇÃO</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button type="button" variant="outline" onClick={clearFilters}>
+                Limpar filtros
+              </Button>
+            </div>
+          </div>
+        }
         onSave={saveTipoContrato}
         onDelete={(id) => del.mutateAsync(id)}
         onDuplicate={duplicateTipoContrato}

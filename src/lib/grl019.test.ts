@@ -66,6 +66,24 @@ describe("parseGrl019", () => {
     expect(result.report?.rows[0].moeda).toBe("");
   });
 
+
+
+  it("preserva COD.CONTRATO alfanumérico como texto", async () => {
+    const file = makeFile([
+      ["Relatório GRL019"],
+      ["Filtro"],
+      ["Período"],
+      ["Empresa"],
+      [""],
+      HEADERS_BASE,
+      ["1", "2", "JM", "RECEBIMENTO", "COE", "CONTRATO C/ORDEM ETANOL", "Cliente", "123", "ITEM", "Produto", 12.5],
+    ]);
+
+    const result = await parseGrl019(file);
+
+    expect(result.report?.rows[0].codContrato).toBe("COE");
+  });
+
   it("retorna diagnóstico com nomes reais quando falta coluna obrigatória", async () => {
     const headersWithoutEmpresa = HEADERS_BASE.filter((header) => header !== "EMPRESA");
     const file = makeFile([headersWithoutEmpresa], "invalido.xlsx");

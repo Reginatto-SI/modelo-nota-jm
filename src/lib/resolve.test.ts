@@ -161,6 +161,31 @@ describe("resolveContrato", () => {
     expect(res.modelo?.cfop).toBe("5118");
   });
 
+
+  it("resolve código de contrato alfanumérico sem remover letras", () => {
+    const rowAlfanumerica = {
+      ...rowBase,
+      codContrato: " coe ",
+      descContrato: "CONTRATO C/ORDEM ETANOL TRIB PIS/COFINS (CFOP 5120)",
+    };
+    const res = resolveContrato({ ...report, rows: [rowAlfanumerica] }, rowAlfanumerica, cadastros({
+      tipos: [tipoContrato({ codigo_contrato: "COE" })],
+    }));
+
+    expect(res.errors).toEqual([]);
+    expect(res.tipoContrato?.codigo_contrato).toBe("COE");
+    expect(res.podeGerar).toBe(true);
+  });
+
+  it("mantém compatibilidade com códigos numéricos comparados como texto", () => {
+    const res = resolveContrato(report, { ...rowBase, codContrato: " 108 " }, cadastros({
+      tipos: [tipoContrato({ codigo_contrato: "108" })],
+    }));
+
+    expect(res.errors).toEqual([]);
+    expect(res.tipoContrato?.codigo_contrato).toBe("108");
+  });
+
   it("usa modelo liberado para a cooperativa via N:N (cooperativa_ids)", () => {
     const res = resolveContrato(report, rowBase, cadastros({
       modelos: [{ ...modelo5118, cooperativa_id: null, cooperativa_ids: [cooperativa.id] }, modelo5923],
