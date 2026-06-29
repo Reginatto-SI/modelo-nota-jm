@@ -26,11 +26,11 @@ export default function Index() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex items-center gap-4 rounded-xl bg-gradient-header p-6 text-primary-foreground shadow-elevated">
-          <Logo size={56} />
+        <div className="flex items-center gap-4 rounded-xl border bg-card p-5 text-card-foreground shadow-card sm:p-6">
+          <Logo size={52} />
           <div>
-            <h1 className="text-2xl font-extrabold">Modelo de Nota JM</h1>
-            <p className="text-sm text-primary-foreground/80">
+            <h1 className="text-2xl font-semibold tracking-tight">Modelo de Nota</h1>
+            <p className="text-sm text-muted-foreground">
               Geração de modelos orientativos de notas fiscais a partir do relatório GRL019.
             </p>
           </div>
