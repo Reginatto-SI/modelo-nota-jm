@@ -60,9 +60,10 @@ function Item({
         cn(
           "flex items-center rounded-lg text-sm font-medium transition-colors",
           collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2",
+          // White opacity keeps inactive menu items legible against the dark-blue sidebar.
           isActive
-            ? "bg-white/10 text-white shadow-sm ring-1 ring-white/10"
-            : "text-sidebar-foreground/78 hover:bg-white/[0.08] hover:text-white",
+            ? "bg-white/[0.12] text-white shadow-sm ring-1 ring-white/10"
+            : "text-white/75 hover:bg-white/10 hover:text-white",
         )
       }
     >
@@ -104,7 +105,7 @@ export function Layout({ children }: { children: ReactNode }) {
           sidebarCollapsed ? "w-20" : "w-64",
         )}
       >
-        <div className={cn("mb-6 flex items-start", sidebarCollapsed ? "justify-center" : "gap-3")}>
+        <div className={cn("mb-6 flex", sidebarCollapsed ? "flex-col items-center gap-3" : "items-start gap-3")}>
           <button
             onClick={() => navigate("/")}
             className={cn("flex min-w-0 items-center text-left", sidebarCollapsed ? "justify-center" : "gap-3")}
@@ -114,7 +115,7 @@ export function Layout({ children }: { children: ReactNode }) {
             {!sidebarCollapsed && (
               <div className="min-w-0">
                 <div className="truncate text-base font-semibold leading-tight tracking-tight text-white">Modelo de Nota</div>
-                <div className="truncate text-xs text-sidebar-foreground/62">JM Assessoria</div>
+                <div className="truncate text-xs text-white/70">JM Assessoria</div>
               </div>
             )}
           </button>
@@ -123,8 +124,8 @@ export function Layout({ children }: { children: ReactNode }) {
             variant="ghost"
             size="icon"
             className={cn(
-              "h-8 w-8 shrink-0 text-sidebar-foreground/70 hover:bg-white/10 hover:text-white",
-              sidebarCollapsed ? "absolute left-14 top-4" : "ml-auto",
+              "h-8 w-8 shrink-0 text-white/70 hover:bg-white/10 hover:text-white",
+              !sidebarCollapsed && "ml-auto",
             )}
             onClick={() => setSidebarCollapsed((current) => !current)}
             aria-label={sidebarCollapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
@@ -144,7 +145,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <>
             {/* Cadastros ficam visíveis apenas após liberar o acesso JM; as rotas seguem protegidas no App. */}
             {!sidebarCollapsed && (
-              <div className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+              <div className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-white/55">
                 Cadastros
               </div>
             )}
@@ -164,7 +165,7 @@ export function Layout({ children }: { children: ReactNode }) {
               size="sm"
               title={sidebarCollapsed ? "Sair do acesso JM" : undefined}
               className={cn(
-                "h-auto w-full text-xs text-sidebar-foreground/60 hover:bg-transparent hover:text-sidebar-foreground",
+                "h-auto w-full text-xs text-white/65 hover:bg-white/10 hover:text-white",
                 sidebarCollapsed ? "justify-center px-0" : "justify-start px-0",
               )}
               onClick={handleLogoutJm}
@@ -179,7 +180,7 @@ export function Layout({ children }: { children: ReactNode }) {
               size="sm"
               title={sidebarCollapsed ? "Acesso JM" : undefined}
               className={cn(
-                "h-auto w-full text-xs text-sidebar-foreground/60 hover:bg-transparent hover:text-sidebar-foreground",
+                "h-auto w-full text-xs text-white/65 hover:bg-white/10 hover:text-white",
                 sidebarCollapsed ? "justify-center px-0" : "justify-start px-0",
               )}
               onClick={handleOpenJmAccess}
@@ -188,7 +189,7 @@ export function Layout({ children }: { children: ReactNode }) {
               {!sidebarCollapsed && "Acesso JM"}
             </Button>
           )}
-          {!sidebarCollapsed && <div className="text-xs text-sidebar-foreground/50">Documento orientativo. Sem validade fiscal.</div>}
+          {!sidebarCollapsed && <div className="text-xs text-white/55">Documento orientativo. Sem validade fiscal.</div>}
         </div>
       </aside>
 
