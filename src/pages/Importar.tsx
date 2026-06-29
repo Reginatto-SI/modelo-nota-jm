@@ -32,9 +32,10 @@ import {
   AlertTriangle,
   Copy,
   HelpCircle,
+  Download,
 } from "lucide-react";
 import { useReport } from "@/context/ReportContext";
-import { parseGrl019, summarize, type ImportDiagnostics } from "@/lib/grl019";
+import { downloadModeloJm, parseGrl019, shouldSyncArmazensFromReport, summarize, type ImportDiagnostics } from "@/lib/grl019";
 import { syncArmazensFromGrl019, useCooperativas, type SyncArmazensFromGrl019Result } from "@/lib/db";
 import type { Grl019Report } from "@/lib/types";
 import { toast } from "sonner";
@@ -43,6 +44,10 @@ type PendingImport = {
   report: Grl019Report;
   missingRecommendedColumns: string[];
 };
+
+function reportSourceLabel(source: Grl019Report["source"]): string {
+  return source === "modelo_jm" ? "Modelo JM" : "GRL019 Maxicom";
+}
 
 type LastSyncResult = SyncArmazensFromGrl019Result & {
   fileName: string;
@@ -62,25 +67,30 @@ export default function Importar() {
     await setReport(nextReport);
 
     let syncMessage = "";
-    try {
-      // Cria/atualiza apenas o cadastro global resumido dos destinatários de EXPEDIÇÃO; o GRL019 completo continua no navegador.
-      const sync = await syncArmazensFromGrl019(nextReport);
-      setLastSync({ ...sync, fileName: nextReport.fileName });
-      await queryClient.invalidateQueries({ queryKey: ["armazens"] });
-      const touched = sync.criados + sync.atualizados;
-      syncMessage = touched
-        ? ` Pré-cadastro: ${sync.criados} criado(s), ${sync.atualizados} atualizado(s).`
-        : " Nenhum novo destinatário para pré-cadastrar.";
-    } catch (error) {
+    if (shouldSyncArmazensFromReport(nextReport)) {
+      try {
+        // Cria/atualiza apenas o cadastro global resumido dos destinatários de EXPEDIÇÃO; o relatório completo continua no navegador.
+        const sync = await syncArmazensFromGrl019(nextReport);
+        setLastSync({ ...sync, fileName: nextReport.fileName });
+        await queryClient.invalidateQueries({ queryKey: ["armazens"] });
+        const touched = sync.criados + sync.atualizados;
+        syncMessage = touched
+          ? ` Pré-cadastro: ${sync.criados} criado(s), ${sync.atualizados} atualizado(s).`
+          : " Nenhum novo destinatário para pré-cadastrar.";
+      } catch (error) {
+        setLastSync(null);
+        const message = error instanceof Error ? error.message : "erro desconhecido";
+        toast.error(`Relatório importado, mas o pré-cadastro de destinatários falhou: ${message}`);
+      }
+    } else {
       setLastSync(null);
-      const message = error instanceof Error ? error.message : "erro desconhecido";
-      toast.error(`Relatório importado, mas o pré-cadastro de destinatários falhou: ${message}`);
+      syncMessage = " Pré-cadastro automático não executado para Modelo JM.";
     }
 
     const warning = missingRecommendedColumns.length
       ? ` Atenção: colunas recomendadas ausentes: ${missingRecommendedColumns.join(", ")}.`
       : "";
-    toast.success(`Relatório importado: ${nextReport.rows.length} linhas.${warning}${syncMessage}`);
+    toast.success(`Relatório importado (${reportSourceLabel(nextReport.source)}): ${nextReport.rows.length} linhas.${warning}${syncMessage}`);
   };
 
   const handleFile = async (file: File) => {
@@ -90,14 +100,14 @@ export default function Importar() {
 
     if (res.error) {
       setDiagnostics(res.diagnostics);
-      toast.error("Falha ao ler o arquivo. Veja o diagnóstico da importação.");
+      toast.error(res.diagnostics.errorMessage ?? "Falha ao ler o arquivo. Veja o diagnóstico da importação.");
       return;
     }
 
     if (res.missingColumns.length) {
       // Erro crítico precisa ficar persistente: o toast some rápido e não comporta o diagnóstico do GRL019.
       setDiagnostics(res.diagnostics);
-      toast.error("Arquivo inválido. Veja o diagnóstico da importação.");
+      toast.error(res.diagnostics.errorMessage ?? "Arquivo inválido. Veja o diagnóstico da importação.");
       return;
     }
 
@@ -174,13 +184,16 @@ export default function Importar() {
           <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
             <FileSpreadsheet className="h-12 w-12 text-primary" />
             <div>
-              <p className="font-medium">Selecione o arquivo Excel do relatório GRL019</p>
+              <p className="font-medium">Selecione o arquivo Excel do relatório GRL019 ou Modelo JM</p>
               <p className="text-sm text-muted-foreground">Formatos aceitos: .xlsx, .xls</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-center gap-2">
               <Button onClick={() => inputRef.current?.click()} disabled={busy}>
                 {report ? <RefreshCw className="mr-1 h-4 w-4" /> : <Upload className="mr-1 h-4 w-4" />}
                 {busy ? "Lendo..." : report ? "Substituir relatório" : "Importar arquivo"}
+              </Button>
+              <Button variant="ghost" onClick={downloadModeloJm} disabled={busy}>
+                <Download className="mr-1 h-4 w-4" /> Baixar modelo JM
               </Button>
               {report && (
                 <Button
@@ -221,6 +234,7 @@ export default function Importar() {
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Info label="Arquivo" value={report.fileName} />
+              <Info label="Origem" value={reportSourceLabel(report.source)} ok />
               <Info label="Aba lida" value={report.sheetName ?? "-"} />
               <Info label="Linha do cabeçalho" value={report.headerRow ? String(report.headerRow) : "-"} ok={!!report.headerRow} />
               <Info label="Importado em" value={new Date(report.importedAt).toLocaleString("pt-BR")} />
@@ -253,9 +267,9 @@ export default function Importar() {
       <AlertDialog open={!!pendingImport} onOpenChange={(open) => !open && setPendingImport(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Substituir relatório GRL019?</AlertDialogTitle>
+            <AlertDialogTitle>Substituir relatório importado?</AlertDialogTitle>
             <AlertDialogDescription>
-              Já existe um GRL019 importado neste navegador. Deseja substituir pelo novo relatório?
+              Já existe uma planilha importada neste navegador. Deseja substituir pela nova origem de dados?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -268,7 +282,7 @@ export default function Importar() {
                 await saveParsedReport(nextImport.report, nextImport.missingRecommendedColumns);
               }}
             >
-              Substituir relatório
+              Substituir planilha
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -288,8 +302,9 @@ function ImportDiagnosticsDialog({
     if (!diagnostics) return;
 
     const text = [
-      "Diagnóstico de importação GRL019",
+      "Diagnóstico de importação",
       `Arquivo: ${diagnostics.fileName}`,
+      `Origem: ${reportSourceLabel(diagnostics.source ?? undefined)}`,
       `Aba lida: ${diagnostics.sheetName}`,
       `Linha de cabeçalho detectada: ${diagnostics.headerRow ?? "não identificada"}`,
       `Quantidade de colunas encontradas: ${diagnostics.foundColumnCount}`,
@@ -308,10 +323,10 @@ function ImportDiagnosticsDialog({
     <Dialog open={!!diagnostics} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Não foi possível importar o GRL019</DialogTitle>
+          <DialogTitle>Não foi possível importar a planilha</DialogTitle>
           <DialogDescription>
-            O sistema não encontrou todas as colunas obrigatórias do GRL019. Verifique se o arquivo importado é o
-            relatório correto e se o cabeçalho está na linha esperada.
+            O sistema não encontrou todas as colunas obrigatórias para geração dos modelos. Verifique se o arquivo
+            importado é o GRL019 correto ou o Modelo JM preenchido.
           </DialogDescription>
         </DialogHeader>
 
@@ -319,6 +334,7 @@ function ImportDiagnosticsDialog({
           <div className="space-y-4 text-sm">
             <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-3">
               <Info label="Arquivo selecionado" value={diagnostics.fileName} />
+              <Info label="Origem" value={reportSourceLabel(diagnostics.source ?? undefined)} />
               <Info label="Aba lida" value={diagnostics.sheetName} />
               <Info
                 label="Linha do cabeçalho"
@@ -346,7 +362,7 @@ function ImportDiagnosticsDialog({
 
             <div>
               <h3 className="mb-2 font-semibold">Colunas reconhecidas pelo sistema ({diagnostics.recognizedColumnCount})</h3>
-              <ColumnList columns={diagnostics.recognizedColumns} empty="Nenhuma coluna do GRL019 foi reconhecida." />
+              <ColumnList columns={diagnostics.recognizedColumns} empty="Nenhuma coluna compatível foi reconhecida." />
             </div>
 
             <div>
@@ -362,8 +378,8 @@ function ImportDiagnosticsDialog({
             <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
               <p className="font-semibold">Como corrigir</p>
               <p className="text-muted-foreground">
-                Gere novamente o GRL019 ou ajuste a planilha para manter o cabeçalho original do relatório. O cabeçalho
-                normalmente fica na linha 6, mas o sistema tenta localizar automaticamente a linha correta.
+                Gere novamente o GRL019 ou baixe o Modelo JM na tela de importação e mantenha as colunas obrigatórias.
+                O cabeçalho do GRL019 normalmente fica na linha 6; no Modelo JM, a primeira linha deve ser o cabeçalho.
               </p>
             </div>
           </div>
