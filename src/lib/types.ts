@@ -112,6 +112,8 @@ export interface Grl019Row {
   _raw: Record<string, unknown>;
 }
 
+export type ReportSource = "grl019" | "modelo_jm";
+
 export interface Grl019Report {
   fileName: string;
   importedAt: string;
@@ -120,4 +122,5 @@ export interface Grl019Report {
   sheetName?: string;
   headerRow?: number;
   missingRecommendedColumns?: string[];
+  source?: ReportSource;
 }

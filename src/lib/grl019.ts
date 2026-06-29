@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import type { Grl019Report, Grl019Row } from "./types";
+import type { Grl019Report, Grl019Row, ReportSource } from "./types";
 
 type Grl019ColumnKey = keyof Omit<Grl019Row, "_raw">;
 
@@ -78,6 +78,29 @@ const HEADER_DETECTION_REQUIRED: Grl019ColumnKey[] = [
   "precoUnitIcms",
 ];
 const EXPECTED_GRL019_HEADER_ROW = 6;
+export const MODELO_JM_SHEET_NAME = "Modelo JM";
+const MODELO_JM_FILE_NAME = "modelo_importacao_jm.xlsx";
+const MODELO_JM_COLUMN_ORDER: Grl019ColumnKey[] = [
+  "contrato",
+  "contratoVinculado",
+  "empresa",
+  "tpFaturamento",
+  "codContrato",
+  "descContrato",
+  "nomeRazaoSocial",
+  "cpfCnpj",
+  "ie",
+  "endereco",
+  "municipio",
+  "estado",
+  "codItem",
+  "descItem",
+  "precoUnitIcms",
+  "tpFrete",
+  "observacao",
+  "contratoCliente",
+  "moeda",
+];
 
 export const REQUIRED_COLUMN_LABELS = REQUIRED.map((key) => COLUMN_LABELS[key]);
 export const RECOMMENDED_COLUMN_LABELS = RECOMMENDED.map((key) => COLUMN_LABELS[key]);
@@ -94,8 +117,16 @@ function normalizeHeader(h: string): string {
 function toNumber(v: unknown): number {
   if (v == null || v === "") return 0;
   if (typeof v === "number") return v;
-  const s = v.toString().trim().replace(/\./g, "").replace(",", ".").replace(/[^0-9.\-]/g, "");
-  const n = parseFloat(s);
+
+  const raw = v.toString().trim().replace(/[^0-9,.-]/g, "");
+  const hasComma = raw.includes(",");
+  const hasDot = raw.includes(".");
+  const normalized = hasComma
+    ? raw.replace(/\./g, "").replace(",", ".")
+    : hasDot
+      ? raw
+      : raw.replace(/[^0-9-]/g, "");
+  const n = parseFloat(normalized);
   return isNaN(n) ? 0 : n;
 }
 
@@ -150,6 +181,14 @@ function getRecognizedColumns(resolved: Partial<Record<Grl019ColumnKey, number>>
     .map((key) => COLUMN_LABELS[key]);
 }
 
+// Prioriza a aba do Modelo JM para permitir arquivos com instruções/abas auxiliares sem criar fluxo paralelo.
+function detectReportSource(wb: XLSX.WorkBook): { sheetName: string; source: ReportSource } {
+  const modeloJmSheet = wb.SheetNames.find((name) => name.trim().toLowerCase() === MODELO_JM_SHEET_NAME.toLowerCase());
+  return modeloJmSheet
+    ? { sheetName: modeloJmSheet, source: "modelo_jm" }
+    : { sheetName: wb.SheetNames[0] ?? "-", source: "grl019" };
+}
+
 function findHeaderRow(rows: unknown[][]) {
   let best: { rowIndex: number; resolved: Partial<Record<Grl019ColumnKey, number>>; score: number } | null = null;
 
@@ -172,6 +211,7 @@ function findHeaderRow(rows: unknown[][]) {
 
 export interface ImportDiagnostics {
   fileName: string;
+  source: ReportSource | null;
   sheetName: string;
   headerRow: number | null;
   foundColumns: string[];
@@ -196,6 +236,7 @@ export interface ParseResult {
 export async function parseGrl019(file: File): Promise<ParseResult> {
   const baseDiagnostics: ImportDiagnostics = {
     fileName: file.name,
+    source: null,
     sheetName: "-",
     headerRow: null,
     foundColumns: [],
@@ -210,8 +251,8 @@ export async function parseGrl019(file: File): Promise<ParseResult> {
 
   try {
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
-    const sheetName = wb.SheetNames[0];
+    const wb = XLSX.read(buf, { type: "array", cellText: true, cellDates: false });
+    const { sheetName, source } = detectReportSource(wb);
     const sheet = wb.Sheets[sheetName];
 
     if (!sheet) {
@@ -224,8 +265,8 @@ export async function parseGrl019(file: File): Promise<ParseResult> {
       };
     }
 
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", blankrows: false });
-    const diagnosticsBase = { ...baseDiagnostics, sheetName };
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", blankrows: false, raw: false });
+    const diagnosticsBase = { ...baseDiagnostics, sheetName, source };
 
     if (rows.length === 0) {
       return {
@@ -259,7 +300,9 @@ export async function parseGrl019(file: File): Promise<ParseResult> {
     };
 
     if (!header) {
-      const error = "Cabeçalho do GRL019 não identificado.";
+      const error = source === "modelo_jm"
+        ? "A planilha importada não possui as colunas obrigatórias para geração dos modelos."
+        : "Cabeçalho do GRL019 não identificado.";
       return {
         missingColumns: diagnostics.missingColumns,
         missingRecommendedColumns: diagnostics.missingRecommendedColumns,
@@ -269,7 +312,12 @@ export async function parseGrl019(file: File): Promise<ParseResult> {
     }
 
     if (missingColumnKeys.length > 0) {
-      return { missingColumns: diagnostics.missingColumns, missingRecommendedColumns: diagnostics.missingRecommendedColumns, diagnostics };
+      const errorMessage = "A planilha importada não possui as colunas obrigatórias para geração dos modelos.";
+      return {
+        missingColumns: diagnostics.missingColumns,
+        missingRecommendedColumns: diagnostics.missingRecommendedColumns,
+        diagnostics: { ...diagnostics, errorMessage },
+      };
     }
 
     const dataRows = rows.slice(header.rowIndex + 1);
@@ -314,6 +362,7 @@ export async function parseGrl019(file: File): Promise<ParseResult> {
         sheetName,
         headerRow: diagnostics.headerRow ?? undefined,
         missingRecommendedColumns: diagnostics.missingRecommendedColumns,
+        source,
       },
     };
   } catch (e) {
@@ -358,4 +407,71 @@ export function summarize(report: Grl019Report): ReportSummary {
     }
   }
   return { totalLinhas: report.rows.length, recebimento, expedicao, vinculoLocalizado, vinculoAusente };
+}
+
+export function shouldSyncArmazensFromReport(report: Grl019Report): boolean {
+  // Pré-cadastro automático depende da semântica dos destinatários de EXPEDIÇÃO do GRL019 Maxicom.
+  // No Modelo JM manual, dados incompletos poderiam criar/atualizar destinatários indevidamente.
+  return report.source !== "modelo_jm";
+}
+
+export function buildModeloJmWorkbook(): XLSX.WorkBook {
+  const headers = MODELO_JM_COLUMN_ORDER.map((key) => COLUMN_LABELS[key]);
+  const instructions = [
+    ["Instruções"],
+    ["Não alterar o nome da aba Modelo JM."],
+    ["Não remover nem renomear os cabeçalhos."],
+    ["Manter contratos como texto para preservar letras e zeros à esquerda."],
+    ["Preencher uma linha por contrato."],
+    ["Para operação casada, preencher CONTRATO VINCULADO."],
+    ["Usar o nome da cooperativa exatamente como cadastrado no sistema."],
+    ["Usar TP FATURAMENTO compatível com o fluxo atual, exemplo RECEBIMENTO ou EXPEDIÇÃO."],
+    ["Preço unitário deve ser o preço da saca em PREÇO UNIT. C/ICMS."],
+  ];
+  const example = [
+    headers,
+    [
+      "001A",
+      "002B",
+      "COOPERATIVA EXEMPLO",
+      "RECEBIMENTO",
+      "0108",
+      "VENDA CONTRA ORDEM",
+      "PRODUTOR EXEMPLO",
+      "000.000.000-00",
+      "ISENTO",
+      "ENDEREÇO EXEMPLO",
+      "SORRISO",
+      "MT",
+      "SOJA",
+      "SOJA EM GRÃOS",
+      "120,00",
+      "CIF",
+      "EXEMPLO DE OBSERVAÇÃO",
+      "CLI-0001",
+      "R$",
+    ],
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const modeloSheet = XLSX.utils.aoa_to_sheet([headers]);
+  modeloSheet["!cols"] = headers.map((header) => ({ wch: Math.max(header.length + 2, 16) }));
+  headers.forEach((_, index) => {
+    const column = XLSX.utils.encode_col(index);
+    for (let row = 2; row <= 1000; row += 1) {
+      const cellAddress = `${column}${row}`;
+      // Pré-formata as linhas de preenchimento como texto para proteger contratos com letras e zeros à esquerda.
+      const cell = modeloSheet[cellAddress] ?? { t: "s", v: "" };
+      cell.z = "@";
+      modeloSheet[cellAddress] = cell;
+    }
+  });
+  XLSX.utils.book_append_sheet(wb, modeloSheet, MODELO_JM_SHEET_NAME);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(instructions), "Instruções");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(example), "Exemplo");
+  return wb;
+}
+
+export function downloadModeloJm(): void {
+  XLSX.writeFile(buildModeloJmWorkbook(), MODELO_JM_FILE_NAME, { bookType: "xlsx" });
 }
