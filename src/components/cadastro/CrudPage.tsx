@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Copy, Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Copy, MoreHorizontal, Plus, Pencil, Trash2, Search } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -74,6 +80,7 @@ interface CrudPageProps<T extends { id?: string }> {
   onDuplicate?: (row: T) => Partial<T>;
   duplicateTitle?: string;
   tableDensity?: "default" | "compact";
+  actionMode?: "icons" | "menu";
   filterControls?: ReactNode;
   showSearch?: boolean;
 }
@@ -92,6 +99,7 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
   onDuplicate,
   duplicateTitle = "Criar regra a partir desta",
   tableDensity = "default",
+  actionMode = "icons",
   filterControls,
   showSearch = true,
 }: CrudPageProps<T>) {
@@ -138,6 +146,7 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
 
   const set = (name: string, value: unknown) => setForm((f) => ({ ...f, [name]: value }));
   const isCompactTable = tableDensity === "compact";
+  const useActionMenu = actionMode === "menu";
 
   return (
     <div className="space-y-6">
@@ -176,7 +185,11 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
                 </TableHead>
               ))}
               <TableHead
-                className={cn("text-right", isCompactTable ? "h-10 px-3 py-2" : "", onDuplicate ? "w-32" : "w-24")}
+                className={cn(
+                  "text-right",
+                  isCompactTable ? "h-10 px-3 py-2" : "",
+                  useActionMenu ? "w-20" : onDuplicate ? "w-32" : "w-24",
+                )}
               >
                 Ações
               </TableHead>
@@ -207,40 +220,68 @@ export function CrudPage<T extends { id?: string; ativo?: boolean }>({
                     </TableCell>
                   ))}
                   <TableCell className={cn("text-right", isCompactTable && "px-3 py-2")}>
-                    {/* Compacta as ações em linha para grids desktop sem alterar o comportamento dos botões. */}
-                    <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className={cn(isCompactTable && "h-8 w-8")}
-                        onClick={() => openEdit(row)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {onDuplicate && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className={cn(isCompactTable && "h-8 w-8")}
-                              onClick={() => openDuplicate(row)}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Criar regra a partir desta</TooltipContent>
-                        </Tooltip>
-                      )}
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className={cn(isCompactTable && "h-8 w-8")}
-                        onClick={() => setDelId(row.id!)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
+                    {useActionMenu ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className={cn("text-muted-foreground", isCompactTable && "h-8 w-8")}
+                            aria-label="Abrir ações do registro"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEdit(row)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Editar
+                          </DropdownMenuItem>
+                          {onDuplicate && (
+                            <DropdownMenuItem onClick={() => openDuplicate(row)}>
+                              <Copy className="mr-2 h-4 w-4" /> Duplicar
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem className="text-destructive" onClick={() => setDelId(row.id!)}>
+                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      // Compacta as ações em linha para grids desktop sem alterar o comportamento dos botões.
+                      <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className={cn(isCompactTable && "h-8 w-8")}
+                          onClick={() => openEdit(row)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        {onDuplicate && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className={cn(isCompactTable && "h-8 w-8")}
+                                onClick={() => openDuplicate(row)}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>{duplicateTitle}</TooltipContent>
+                          </Tooltip>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className={cn(isCompactTable && "h-8 w-8")}
+                          onClick={() => setDelId(row.id!)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
