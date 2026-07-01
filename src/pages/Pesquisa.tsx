@@ -593,7 +593,7 @@ function isContratoAuxiliar(res: ResolveResult) {
 }
 
 function ModeloBadge({ res }: { res: ResolveResult }) {
-  if (res.errors.length > 0) return <Badge variant="destructive">Erro param.</Badge>;
+  if (res.errors.length > 0) return <Badge variant="destructive">Falta Parametrizar</Badge>;
   if (res.expedicaoComoVinculo5923) return <Badge variant="secondary">Vínculo do 5923</Badge>;
   if (res.expedicaoVinculadaRecebimento) return <Badge variant="secondary">Ver recebimento</Badge>;
   if (res.ofereceCasada) return <Badge>5118 + 5923</Badge>;
