@@ -280,7 +280,7 @@ function partyFromCooperativa(cooperativa?: Cooperativa): NotaParty {
   };
 }
 
-function partyFromArmazemOrExpedicao(armazem?: Armazem, expedicao?: Grl019Row): NotaParty {
+function partyFromArmazemOrExpedicao(armazem?: Armazem, expedicao?: Grl019Row, cooperativa?: Cooperativa): NotaParty {
   if (armazem) {
     return {
       nome: armazem.razao_social,
@@ -307,6 +307,10 @@ function partyFromArmazemOrExpedicao(armazem?: Armazem, expedicao?: Grl019Row): 
     };
   }
 
+  if (cooperativa) {
+    return partyFromCooperativa(cooperativa);
+  }
+
   return { ...EMPTY_PARTY };
 }
 
@@ -330,15 +334,16 @@ function buildVars(n: Nota, r: ResolveResult): Record<string, string> {
     return t ? t : "####";
   };
   const exped = r.expedicaoRow;
-  const armazemNome = r.armazem?.razao_social || exped?.nomeRazaoSocial || "";
-  const armazemCnpj = r.armazem?.cnpj_cpf || exped?.cpfCnpj || "";
-  const armazemIe = r.armazem?.inscricao_estadual || exped?.ie || "";
-  const armazemEndereco = r.armazem?.endereco || exped?.endereco || "";
-  const armazemBairro = r.armazem?.bairro || "";
-  const armazemCep = r.armazem?.cep || "";
-  const armazemMunicipio = r.armazem?.municipio || exped?.municipio || "";
-  const armazemUf = r.armazem?.uf || exped?.estado || "";
-  const armazemTelefone = r.armazem?.telefone || "";
+  // Para 5923 isolado com destinatário armazém/destinatário, a empresa do GRL019 pode representar o destinatário final.
+  const armazemNome = r.armazem?.razao_social || exped?.nomeRazaoSocial || r.cooperativa?.razao_social || "";
+  const armazemCnpj = r.armazem?.cnpj_cpf || exped?.cpfCnpj || r.cooperativa?.cnpj || "";
+  const armazemIe = r.armazem?.inscricao_estadual || exped?.ie || r.cooperativa?.inscricao_estadual || "";
+  const armazemEndereco = r.armazem?.endereco || exped?.endereco || r.cooperativa?.endereco || "";
+  const armazemBairro = r.armazem?.bairro || r.cooperativa?.bairro || "";
+  const armazemCep = r.armazem?.cep || r.cooperativa?.cep || "";
+  const armazemMunicipio = r.armazem?.municipio || exped?.municipio || r.cooperativa?.municipio || "";
+  const armazemUf = r.armazem?.uf || exped?.estado || r.cooperativa?.uf || "";
+  const armazemTelefone = r.armazem?.telefone || r.cooperativa?.telefone || "";
   const armazemEnderecoCompleto = compact([armazemEndereco, armazemBairro, armazemCep && `CEP ${armazemCep}`, armazemMunicipio, armazemUf]);
   const cooperativaEnderecoCompleto = compact([
     r.cooperativa?.endereco,
@@ -497,7 +502,7 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
 
   const tipoDestinatario = resolveTipoDestinatario(modelo, which);
   const destinatario = tipoDestinatario === "armazem_destinatario"
-    ? partyFromArmazemOrExpedicao(r.armazem, r.expedicaoRow)
+    ? partyFromArmazemOrExpedicao(r.armazem, r.expedicaoRow, r.cooperativa)
     : partyFromCooperativa(r.cooperativa);
 
   const nota: Nota = {

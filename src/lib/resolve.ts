@@ -67,6 +67,44 @@ function coopDisplayName(cooperativa?: Cooperativa, fallback?: string) {
   return cooperativa?.nome_grl019 || cooperativa?.razao_social || fallback || "cooperativa";
 }
 
+function isTipoContrato5923Isolado(tipoContrato: TipoContrato, modelo?: ModeloNota) {
+  return (
+    tipoContrato.cfop?.trim() === "5923" &&
+    modelo?.tipo_destinatario === "armazem_destinatario" &&
+    !tipoContrato.exige_contrato_vinculado &&
+    !tipoContrato.gera_operacao_casada
+  );
+}
+
+function contextoEmpresaModelo(tipoContrato: TipoContrato, modelo: ModeloNota | undefined, cooperativa?: Cooperativa) {
+  // No 5923 isolado, o cadastro técnico de cooperativas/empresas pode representar empresa/armazém final.
+  if (isTipoContrato5923Isolado(tipoContrato, modelo)) {
+    return {
+      nome: coopDisplayName(cooperativa, "empresa do GRL019"),
+      entidade: "empresa/armazém",
+      origem: "empresa do GRL019",
+    };
+  }
+
+  return {
+    nome: coopDisplayName(cooperativa),
+    entidade: "cooperativa",
+    origem: "cooperativa do GRL019",
+  };
+}
+
+// Identifica o 5923 principal fora do fluxo casado 5118 + 5923.
+export function isModelo5923Isolado(res: Pick<ResolveResult, "cfop" | "modelo" | "tipoContrato">) {
+  return (
+    res.cfop === "5923" &&
+    res.modelo?.cfop === "5923" &&
+    res.modelo?.tipo_destinatario === "armazem_destinatario" &&
+    Boolean(res.tipoContrato) &&
+    !res.tipoContrato?.exige_contrato_vinculado &&
+    !res.tipoContrato?.gera_operacao_casada
+  );
+}
+
 // Um modelo está liberado para a cooperativa quando ela consta em cooperativa_ids
 // (relacionamento N:N). Fallback ao campo legado cooperativa_id para registros antigos.
 function modeloLiberadoPara(modelo: ModeloNota, cooperativaId: string) {
@@ -171,13 +209,14 @@ export function resolveContrato(
     if (!modelo) {
       // Se o modelo vinculado existe mas não está liberado para esta cooperativa, avisa de forma clara.
       const modeloVinculado = findModeloPorId(cad.modelos, tipoContrato.modelo_nota_id);
+      const contextoModelo = contextoEmpresaModelo(tipoContrato, modeloVinculado, cooperativa);
       if (modeloVinculado && modeloVinculado.ativo && !modeloLiberadoPara(modeloVinculado, cooperativa.id)) {
         errors.push(
-          `O modelo "${modeloVinculado.nome_modelo}" (CFOP ${modeloVinculado.cfop}) não está liberado para a cooperativa ${coopDisplayName(cooperativa)}. Libere este modelo para a cooperativa no cadastro de Modelos de Nota.`,
+          `O modelo "${modeloVinculado.nome_modelo}" (CFOP ${modeloVinculado.cfop}) não está liberado para a ${contextoModelo.entidade} ${contextoModelo.nome}. Libere este modelo para o destinatário do modelo no cadastro de Modelos de Nota.`,
         );
       } else {
         errors.push(
-          `Modelo CFOP ${cfopParametrizado || "vinculado"} não encontrado para a cooperativa ${coopDisplayName(cooperativa)}. Verifique se existe um Modelo de Nota ativo com CFOP ${cfopParametrizado || "compatível"} liberado para a mesma cooperativa do GRL019.`,
+          `Modelo CFOP ${cfopParametrizado || "vinculado"} não encontrado para a ${contextoModelo.entidade} ${contextoModelo.nome}. Verifique se existe um Modelo de Nota ativo com CFOP ${cfopParametrizado || "compatível"} liberado para a mesma ${contextoModelo.origem}.`,
         );
       }
     } else if (cfopParametrizado && modelo.cfop !== cfopParametrizado) {

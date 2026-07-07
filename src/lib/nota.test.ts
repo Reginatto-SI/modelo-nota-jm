@@ -105,6 +105,33 @@ describe("buildNota", () => {
     expect(nota.valorTotal).toBe(60000);
   });
 
+  it("monta 5923 isolado com destinatário armazém/destinatário pela empresa do GRL019", () => {
+    const res = {
+      ...resolveResult(),
+      expedicaoRow: undefined,
+      armazem: undefined,
+      cfop: "5923",
+      modelo: { ...modeloBase, cfop: "5923", tipo_destinatario: "armazem_destinatario" as const },
+      cooperativa: {
+        ...cooperativa,
+        razao_social: "Perfil Agro",
+        cnpj: "123",
+        inscricao_estadual: "IE-123",
+        endereco: "Rua Armazém",
+        municipio: "Sorriso",
+        uf: "MT",
+      },
+    };
+
+    const nota = buildNota(res, "5923", res.modelo);
+
+    expect(nota.destinatario.nome).toBe("Perfil Agro");
+    expect(nota.destinatario.cpfCnpj).toBe("123");
+    expect(nota.destinatario.municipio).toBe("Sorriso");
+    expect(nota.destinatario.uf).toBe("MT");
+    expect(nota.dadosAdicionais).not.toContain("{{");
+  });
+
   it("converte preço da saca em dólar pelo fator configurado antes de calcular por KG", () => {
     const dolarRow = { ...row, precoUnitIcms: 12, moeda: "US$" };
     const nota = buildNota({ ...resolveResult(), searchedRow: dolarRow, recebimentoRow: dolarRow, warnings: [] }, "5118", {
