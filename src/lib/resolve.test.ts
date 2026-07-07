@@ -162,6 +162,32 @@ describe("resolveContrato", () => {
   });
 
 
+  it("permite 5923 isolado quando o tipo não exige vínculo nem operação casada", () => {
+    const row5923 = { ...rowBase, contratoVinculado: "0", codContrato: "114" };
+    const res = resolveContrato(
+      { ...report, rows: [row5923] },
+      row5923,
+      cadastros({
+        modelos: [modelo5118, modelo5923],
+        tipos: [
+          tipoContrato({
+            codigo_contrato: "114",
+            cfop: "5923",
+            modelo_nota_id: modelo5923.id,
+            exige_contrato_vinculado: false,
+            gera_operacao_casada: false,
+          }),
+        ],
+      }),
+    );
+
+    expect(res.errors).toEqual([]);
+    expect(res.modelo?.cfop).toBe("5923");
+    expect(res.modelo5923).toBeUndefined();
+    expect(res.ofereceCasada).toBe(false);
+    expect(res.podeGerar).toBe(true);
+  });
+
   it("trata RECEBIMENTO e ENTRADA como TP FATURAMENTO equivalentes", () => {
     const rowEntrada = { ...rowBase, tpFaturamento: " entrada " };
     const resEntradaComCadastroRecebimento = resolveContrato(
@@ -242,6 +268,32 @@ describe("resolveContrato", () => {
     expect(res.podeGerar).toBe(false);
     expect(res.modelo).toBeUndefined();
     expect(res.errors.some((e) => e.includes("não está liberado para a cooperativa"))).toBe(true);
+  });
+
+
+  it("usa empresa/armazém em mensagem de modelo 5923 isolado não liberado", () => {
+    const row5923 = { ...rowBase, contratoVinculado: "0", codContrato: "114" };
+    const res = resolveContrato(
+      { ...report, rows: [row5923] },
+      row5923,
+      cadastros({
+        modelos: [modelo5118, { ...modelo5923, cooperativa_id: null, cooperativa_ids: ["outra-coop"] }],
+        tipos: [
+          tipoContrato({
+            codigo_contrato: "114",
+            cfop: "5923",
+            modelo_nota_id: modelo5923.id,
+            exige_contrato_vinculado: false,
+            gera_operacao_casada: false,
+          }),
+        ],
+      }),
+    );
+
+    expect(res.podeGerar).toBe(false);
+    expect(res.modelo).toBeUndefined();
+    expect(res.errors.some((e) => e.includes("não está liberado para a empresa/armazém"))).toBe(true);
+    expect(res.errors.some((e) => e.includes("não está liberado para a cooperativa"))).toBe(false);
   });
 
 
