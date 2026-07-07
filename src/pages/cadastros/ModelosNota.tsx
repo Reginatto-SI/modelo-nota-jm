@@ -174,7 +174,7 @@ export default function ModelosNota() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Modelos de Nota</h1>
             <p className="text-sm text-muted-foreground">
-              Modelos CFOP 5118, 5923, 5132 e 5133 liberados para uma ou mais cooperativas.
+              Cadastre modelos de nota por CFOP e libere para uma ou mais cooperativas.
             </p>
           </div>
           <Button onClick={openNew}>
@@ -264,18 +264,14 @@ export default function ModelosNota() {
               <TabsContent value="dados" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>CFOP</Label>
-                  <Select value={String(form.cfop ?? "")} onValueChange={(v) => set("cfop", v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["5118", "5923", "5132", "5133"].map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    value={String(form.cfop ?? "")}
+                    onChange={(e) => set("cfop", e.target.value.trim())}
+                    placeholder="Ex.: 5118, 5923, 5132 ou outro CFOP"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Informe o CFOP do modelo conforme a parametrização fiscal. Novos CFOPs não exigem alteração no código.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">

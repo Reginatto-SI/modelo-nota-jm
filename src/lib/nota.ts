@@ -2,7 +2,8 @@ import type { Armazem, Cooperativa, Grl019Row, ModeloNota } from "./types";
 import { normalizeTipoFrete } from "./tipoFrete";
 import { QUANTIDADE_PADRAO, SACA_KG, type ResolveResult } from "./resolve";
 
-export type CfopModelo = "5118" | "5923" | "5132" | "5133";
+// CFOP é parametrizado no Modelo de Nota; mantém string para permitir novos modelos sem alteração de código.
+export type CfopModelo = string;
 
 export interface NotaParty {
   nome: string;

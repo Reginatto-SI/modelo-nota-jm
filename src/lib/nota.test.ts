@@ -419,6 +419,41 @@ describe("buildNota", () => {
     expect(buildNotaPdfFileName(nota)).toContain("0000431969");
   });
 
+  it("monta modelo simples de CFOP genérico usando parametrização do modelo", () => {
+    const res = resolveResult();
+    res.expedicaoRow = {
+      ...row,
+      contrato: "EXP-5120",
+      tpFaturamento: "EXPEDIÇÃO",
+      nomeRazaoSocial: "DESTINATARIO FINAL LTDA",
+      cpfCnpj: "22222222000122",
+      ie: "IE-DEST",
+      endereco: "Rua Destino",
+      municipio: "Sorriso",
+      estado: "MT",
+    };
+    const nota = buildNota(res, "5120", {
+      ...modeloBase,
+      cfop: "5120",
+      nome_modelo: "Modelo 5120",
+      natureza_operacao: "Venda de produção do estabelecimento",
+      tipo_destinatario: "armazem_destinatario",
+      cst_icms_padrao: "090",
+      quantidade_padrao: 45000,
+      dados_adicionais_template:
+        "CFOP {{cfop}} NAT {{natureza_operacao}} CST {{cst}} DEST {{destinatario_final_nome}}",
+    });
+
+    expect(nota.cfop).toBe("5120");
+    expect(nota.nomeModelo).toBe("Modelo 5120");
+    expect(nota.naturezaOperacao).toBe("Venda de produção do estabelecimento");
+    expect(nota.produto.cst).toBe("090");
+    expect(nota.destinatario.nome).toBe("DESTINATARIO FINAL LTDA");
+    expect(nota.quantidade).toBe(45000);
+    expect(nota.dadosAdicionais).toContain("CFOP 5120");
+    expect(nota.dadosAdicionais).toContain("NAT Venda de produção do estabelecimento");
+  });
+
   it("mantém fallback por CFOP quando tipo_destinatario está ausente em modelo legado", () => {
     const res = resolveResult();
     res.expedicaoRow = { ...row, nomeRazaoSocial: "DESTINO FINAL", cpfCnpj: "222", tpFaturamento: "EXPEDIÇÃO" };

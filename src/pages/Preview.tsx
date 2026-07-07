@@ -63,6 +63,14 @@ export default function Preview() {
   };
 
   const gerarPdfConfirmado = () => {
+    const primeiraNotaSemCfop = notas.find((n) => !n.cfop?.trim());
+    if (primeiraNotaSemCfop) {
+      return toast.error("Modelo sem CFOP parametrizado. Revise o cadastro de Modelos de Nota antes de gerar o PDF.");
+    }
+    const primeiraNotaSemNatureza = notas.find((n) => !n.naturezaOperacao?.trim());
+    if (primeiraNotaSemNatureza) {
+      return toast.error(`Modelo CFOP ${primeiraNotaSemNatureza.cfop}: informe a natureza da operação no cadastro do modelo antes de gerar o PDF.`);
+    }
     const primeiraNotaSemQuantidade = notas.find((n) => n.quantidade <= 0);
     if (primeiraNotaSemQuantidade) {
       return toast.error(`Modelo CFOP ${primeiraNotaSemQuantidade.cfop}: quantidade deve ser maior que zero.`);
