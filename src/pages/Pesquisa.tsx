@@ -22,7 +22,7 @@ import { useReport } from "@/context/ReportContext";
 import {
   useCooperativas, useArmazens, useProdutos, useModelos, useTiposContrato,
 } from "@/lib/db";
-import { QUANTIDADE_PADRAO, resolveContrato, type CadastrosBundle, type ResolveResult } from "@/lib/resolve";
+import { QUANTIDADE_PADRAO, isModelo5923Isolado, resolveContrato, type CadastrosBundle, type ResolveResult } from "@/lib/resolve";
 import { buildNota, calculateCurrencyValues, isMoedaDolar, normalizeMoeda, type CfopModelo, type Nota } from "@/lib/nota";
 import { isExpedicaoContrato, isRecebimentoContrato } from "@/lib/tpFaturamento";
 import type { Grl019Report, Grl019Row } from "@/lib/types";
@@ -38,6 +38,24 @@ function normalize(value: unknown) {
 
 function digits(value: unknown) {
   return String(value ?? "").replace(/\D/g, "");
+}
+
+function getModeloMissingContext(res: ResolveResult) {
+  // No 5923 isolado, evita chamar a empresa/armazém final de cooperativa nas mensagens da geração.
+  const nome = res.cooperativa?.nome_grl019 ?? res.cooperativa?.razao_social ?? "empresa do GRL019";
+  if (isModelo5923Isolado(res)) {
+    return {
+      entidade: "empresa/armazém",
+      nome,
+      origem: "empresa do GRL019",
+    };
+  }
+
+  return {
+    entidade: "cooperativa",
+    nome: nome || "cooperativa",
+    origem: "cooperativa do GRL019",
+  };
 }
 
 // Busca principal operacional: mantém a pesquisa focada nos campos usados para localizar o contrato.
@@ -147,11 +165,12 @@ export default function Pesquisa() {
   const generate = (res: ResolveResult, which: CfopModelo[]) => {
     const notas: Nota[] = [];
     for (const w of which) {
-      const modelo = w === "5923" ? res.modelo5923 : res.modelo;
+      // 5923 isolado usa o modelo principal; somente a operação casada usa o modelo5923 secundário.
+      const modelo = w === "5923" && !isModelo5923Isolado(res) ? res.modelo5923 : res.modelo;
       if (!modelo) {
-        const cooperativa = res.cooperativa?.nome_grl019 ?? res.cooperativa?.razao_social ?? "cooperativa";
+        const contextoModelo = getModeloMissingContext(res);
         toast.error(
-          `Modelo CFOP ${w} não encontrado para a cooperativa ${cooperativa}. Verifique se existe um Modelo de Nota ativo com CFOP ${w} vinculado à mesma cooperativa do GRL019.`,
+          `Modelo CFOP ${w} não encontrado para a ${contextoModelo.entidade} ${contextoModelo.nome}. Verifique se existe um Modelo de Nota ativo com CFOP ${w} vinculado à mesma ${contextoModelo.origem}.`,
         );
         continue;
       }
