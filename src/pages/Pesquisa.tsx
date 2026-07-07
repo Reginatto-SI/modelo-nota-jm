@@ -24,6 +24,7 @@ import {
 } from "@/lib/db";
 import { QUANTIDADE_PADRAO, resolveContrato, type CadastrosBundle, type ResolveResult } from "@/lib/resolve";
 import { buildNota, calculateCurrencyValues, isMoedaDolar, normalizeMoeda, type CfopModelo, type Nota } from "@/lib/nota";
+import { isExpedicaoContrato, isRecebimentoContrato } from "@/lib/tpFaturamento";
 import type { Grl019Report, Grl019Row } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -70,6 +71,7 @@ export default function Pesquisa() {
   const [dialog, setDialog] = useState<ResolveResult | null>(null);
   const [details, setDetails] = useState<ResolveResult | null>(null);
   const [mostrarAuxiliares, setMostrarAuxiliares] = useState(false);
+  const [mostrarApenasRecebimento, setMostrarApenasRecebimento] = useState(true);
 
   const { data: cooperativas = [] } = useCooperativas();
   const { data: armazens = [] } = useArmazens();
@@ -86,10 +88,11 @@ export default function Pesquisa() {
     // Reaproveita a classificação centralizada da resolução para ocultar somente linhas auxiliares/vinculadas.
     return report.rows
       .filter((row) => smartSearchMatches(row, q))
+      .filter((row) => !mostrarApenasRecebimento || isRecebimentoContrato(row))
       .map((row) => ({ row, res: resolveContrato(report, row, cad) }))
       .filter(({ row, res }) => mostrarAuxiliares || !isContratoAuxiliar(res) || isBuscaContratoExato(row, q))
       .slice(0, 50);
-  }, [cad, mostrarAuxiliares, report, q]);
+  }, [cad, mostrarApenasRecebimento, mostrarAuxiliares, report, q]);
 
   const exibindoAuxiliarPorBuscaExata = resolvedRows.some(
     ({ row, res }) => !mostrarAuxiliares && isContratoAuxiliar(res) && isBuscaContratoExato(row, q),
@@ -111,14 +114,14 @@ export default function Pesquisa() {
       );
     }
     toast(
-      `Este contrato de expedição é usado apenas como vínculo para montar o modelo CFOP 5923. Gere o modelo pelo contrato de recebimento vinculado: ${contrato || "não localizado"}.`,
+      `Contratos de expedição não geram modelo de nota diretamente. Use o contrato de recebimento vinculado para gerar o modelo${contrato ? `: ${contrato}` : "."}`,
     );
     if (contrato) setQ(contrato);
   };
 
   const onGerar = (res: ResolveResult) => {
-    // EXPEDIÇÃO vinculada não gera nota diretamente; ela só alimenta o destinatário do 5923.
-    if (res.expedicaoVinculadaRecebimento) {
+    // EXPEDIÇÃO não gera nota diretamente; ela só pode alimentar dados do 5923 vinculado ao recebimento.
+    if (isExpedicaoContrato(res.searchedRow)) {
       orientarRecebimento(res);
       return;
     }
@@ -180,10 +183,16 @@ export default function Pesquisa() {
               className="pl-9"
             />
           </div>
-          <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
-            <Switch checked={mostrarAuxiliares} onCheckedChange={setMostrarAuxiliares} />
-            Mostrar contratos vinculados/auxiliares
-          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
+            <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+              <Switch checked={mostrarApenasRecebimento} onCheckedChange={setMostrarApenasRecebimento} />
+              Mostrar apenas contratos de recebimento/entrada
+            </label>
+            <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+              <Switch checked={mostrarAuxiliares} onCheckedChange={setMostrarAuxiliares} />
+              Mostrar contratos vinculados/auxiliares
+            </label>
+          </div>
           {exibindoAuxiliarPorBuscaExata && (
             <p className="text-xs text-muted-foreground">
               Este contrato é auxiliar/vinculado. Para gerar o modelo, use o contrato de recebimento vinculado.
@@ -598,6 +607,7 @@ function isContratoAuxiliar(res: ResolveResult) {
 }
 
 function ModeloBadge({ res }: { res: ResolveResult }) {
+  if (isExpedicaoContrato(res.searchedRow)) return <Badge variant="secondary">Expedição</Badge>;
   if (res.errors.length > 0) return <Badge variant="destructive">Falta Parametrizar</Badge>;
   if (res.expedicaoComoVinculo5923) return <Badge variant="secondary">Vínculo do 5923</Badge>;
   if (res.expedicaoVinculadaRecebimento) return <Badge variant="secondary">Ver recebimento</Badge>;

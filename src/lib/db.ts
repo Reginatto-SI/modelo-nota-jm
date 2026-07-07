@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { isExpedicaoContrato } from "./tpFaturamento";
 import type { Cooperativa, Armazem, Produto, ModeloNota, TipoContrato, Grl019Report, Grl019Row } from "./types";
 
 type TableName = "cooperativas" | "armazens" | "produtos" | "modelos_nota" | "tipos_contrato";
@@ -105,7 +106,7 @@ export async function syncArmazensFromGrl019(report: Grl019Report): Promise<Sync
   const candidates = new Map<string, ArmazemPreCadastro>();
 
   report.rows.forEach((row) => {
-    const isExpedicao = row.tpFaturamento.toUpperCase().includes("EXPED");
+    const isExpedicao = isExpedicaoContrato(row);
     const cpfCnpjNormalizado = normalizeCpfCnpj(row.cpfCnpj);
     if (!isExpedicao) return;
     if (!cpfCnpjNormalizado || isBlank(row.nomeRazaoSocial)) {
