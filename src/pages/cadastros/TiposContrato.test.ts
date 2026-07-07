@@ -21,7 +21,18 @@ function tipoContrato(overrides: Partial<TipoContrato> = {}): TipoContrato {
 }
 
 describe("hasDuplicateTipoContrato", () => {
-  it("bloqueia duplicidade por cooperativa, código textual normalizado e TP faturamento", () => {
+  it("bloqueia duplicidade por cooperativa, código textual normalizado, TP faturamento e modelo", () => {
+    const data = [tipoContrato({ codigo_contrato: "COE", modelo_nota_id: "modelo-1" })];
+
+    expect(hasDuplicateTipoContrato(data, {
+      cooperativa_id: "coop-1",
+      codigo_contrato: " coe ",
+      tp_faturamento: "recebimento",
+      modelo_nota_id: "modelo-1",
+    })).toBe(true);
+  });
+
+  it("permite mesmo código, cooperativa e TP faturamento quando o modelo de nota é diferente", () => {
     const data = [tipoContrato({ codigo_contrato: "COE", modelo_nota_id: "modelo-1" })];
 
     expect(hasDuplicateTipoContrato(data, {
@@ -29,7 +40,7 @@ describe("hasDuplicateTipoContrato", () => {
       codigo_contrato: " coe ",
       tp_faturamento: "recebimento",
       modelo_nota_id: "modelo-2",
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it("permite mesmo código na mesma cooperativa quando o TP faturamento é diferente", () => {

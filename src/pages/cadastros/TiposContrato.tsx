@@ -19,14 +19,16 @@ export const normalizeContractCode = (value: unknown) => String(value ?? "").tri
 const normalizeText = (value: unknown) => String(value ?? "").trim().toUpperCase();
 
 export function hasDuplicateTipoContrato(data: TipoContrato[], record: Partial<TipoContrato>) {
-  // A chave de duplicidade segue a mesma chave lógica usada pela resolução da /pesquisa.
+  // Permite regras fiscais alternativas para o mesmo contrato/TP quando o modelo muda.
+  // A geração continua bloqueando múltiplas regras ativas para não escolher modelo errado silenciosamente.
   return data.some((item) => {
     const mesmoRegistro = record.id && item.id === record.id;
     return (
       !mesmoRegistro &&
       item.cooperativa_id === record.cooperativa_id &&
       normalizeContractCode(item.codigo_contrato) === normalizeContractCode(record.codigo_contrato) &&
-      normalizeText(item.tp_faturamento) === normalizeText(record.tp_faturamento)
+      normalizeText(item.tp_faturamento) === normalizeText(record.tp_faturamento) &&
+      item.modelo_nota_id === (record.modelo_nota_id ?? null)
     );
   });
 }
@@ -117,8 +119,8 @@ export default function TiposContrato() {
     const duplicado = hasDuplicateTipoContrato(data, record);
 
     if (duplicado) {
-      toast.error("Já existe uma regra cadastrada para esta cooperativa, código e tipo de faturamento.");
-      throw new Error("Regra duplicada para cooperativa, código e tipo de faturamento.");
+      toast.error("Já existe uma regra cadastrada para esta cooperativa, código, tipo de faturamento e modelo de nota.");
+      throw new Error("Regra duplicada para cooperativa, código, tipo de faturamento e modelo de nota.");
     }
 
     await save.mutateAsync(record);

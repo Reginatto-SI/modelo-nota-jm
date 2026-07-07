@@ -240,13 +240,15 @@ describe("resolveContrato", () => {
     expect(res.podeGerar).toBe(true);
   });
 
-  it("bloqueia duplicidade ativa para mesma cooperativa, código e TP FATURAMENTO", () => {
+  it("bloqueia geração ambígua com mais de uma regra ativa para mesma cooperativa, código e TP FATURAMENTO", () => {
     const res = resolveContrato(report, rowBase, cadastros({
-      tipos: [tipoContrato({ id: "a" }), tipoContrato({ id: "b" })],
+      tipos: [tipoContrato({ id: "a", cfop: "5118" }), tipoContrato({ id: "b", cfop: "5934" })],
     }));
 
     expect(res.podeGerar).toBe(false);
     expect(res.errors[0]).toContain("Existe mais de uma parametrização ativa para o contrato 108 / RECEBIMENTO / COAFORTE");
+    expect(res.errors[0]).toContain("5118, 5934");
+    expect(res.errors[0]).toContain("Escolha qual regra deve ficar ativa antes de gerar o modelo");
     expect(res.cfop).toBeUndefined();
   });
 

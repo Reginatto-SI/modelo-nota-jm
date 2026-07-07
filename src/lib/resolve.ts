@@ -148,8 +148,11 @@ export function resolveContrato(
     const tiposAtivos = findTiposAtivos(cad.tipos, cooperativa.id, linhaParametrizacao);
 
     if (tiposAtivos.length > 1) {
+      const modelosParametrizados = tiposAtivos
+        .map((tipo) => tipo.cfop?.trim() || tipo.modelo_nota_id || "modelo sem CFOP")
+        .join(", ");
       errors.push(
-        `Existe mais de uma parametrização ativa para o contrato ${linhaParametrizacao.codContrato} / ${linhaParametrizacao.tpFaturamento} / ${coopDisplayName(cooperativa)}. Revise o cadastro de Tipos de Contrato antes de gerar o modelo.`,
+        `Existe mais de uma parametrização ativa para o contrato ${linhaParametrizacao.codContrato} / ${linhaParametrizacao.tpFaturamento} / ${coopDisplayName(cooperativa)} (${modelosParametrizados}). Escolha qual regra deve ficar ativa antes de gerar o modelo.`,
       );
     } else {
       tipoContrato = tiposAtivos[0];
