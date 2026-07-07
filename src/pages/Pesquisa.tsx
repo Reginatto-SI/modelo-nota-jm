@@ -1,8 +1,9 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,6 +41,8 @@ function digits(value: unknown) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
 // Busca principal operacional: mantém a pesquisa focada nos campos usados para localizar o contrato.
 function smartSearchMatches(row: Grl019Row, term: string) {
   if (!term.trim()) return true;
@@ -72,6 +75,8 @@ export default function Pesquisa() {
   const [details, setDetails] = useState<ResolveResult | null>(null);
   const [mostrarAuxiliares, setMostrarAuxiliares] = useState(false);
   const [mostrarApenasRecebimento, setMostrarApenasRecebimento] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const { data: cooperativas = [] } = useCooperativas();
   const { data: armazens = [] } = useArmazens();
@@ -90,9 +95,27 @@ export default function Pesquisa() {
       .filter((row) => smartSearchMatches(row, q))
       .filter((row) => !mostrarApenasRecebimento || isRecebimentoContrato(row))
       .map((row) => ({ row, res: resolveContrato(report, row, cad) }))
-      .filter(({ row, res }) => mostrarAuxiliares || !isContratoAuxiliar(res) || isBuscaContratoExato(row, q))
-      .slice(0, 50);
+      .filter(({ row, res }) => mostrarAuxiliares || !isContratoAuxiliar(res) || isBuscaContratoExato(row, q));
   }, [cad, mostrarApenasRecebimento, mostrarAuxiliares, report, q]);
+
+  // Paginação aplicada somente depois da busca e dos filtros operacionais.
+  const totalPages = Math.max(1, Math.ceil(resolvedRows.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = (safeCurrentPage - 1) * pageSize;
+  const paginatedRows = useMemo(
+    () => resolvedRows.slice(pageStart, pageStart + pageSize),
+    [pageSize, pageStart, resolvedRows],
+  );
+  const hasResults = resolvedRows.length > 0;
+  const firstResult = hasResults ? pageStart + 1 : 0;
+  const lastResult = hasResults ? Math.min(pageStart + pageSize, resolvedRows.length) : 0;
+
+  const resetPagination = () => setCurrentPage(1);
+
+  useEffect(() => {
+    // Mantém o estado real da página dentro do intervalo válido quando filtros reduzem o total.
+    setCurrentPage((page) => Math.min(Math.max(1, page), totalPages));
+  }, [totalPages]);
 
   const exibindoAuxiliarPorBuscaExata = resolvedRows.some(
     ({ row, res }) => !mostrarAuxiliares && isContratoAuxiliar(res) && isBuscaContratoExato(row, q),
@@ -116,7 +139,10 @@ export default function Pesquisa() {
     toast(
       `Contratos de expedição não geram modelo de nota diretamente. Use o contrato de recebimento vinculado para gerar o modelo${contrato ? `: ${contrato}` : "."}`,
     );
-    if (contrato) setQ(contrato);
+    if (contrato) {
+      setQ(contrato);
+      resetPagination();
+    }
   };
 
   const onGerar = (res: ResolveResult) => {
@@ -178,18 +204,33 @@ export default function Pesquisa() {
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value);
+                resetPagination();
+              }}
               placeholder="Pesquisar contrato, agricultor ou CPF/CNPJ..."
               className="pl-9"
             />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
             <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
-              <Switch checked={mostrarApenasRecebimento} onCheckedChange={setMostrarApenasRecebimento} />
+              <Switch
+                checked={mostrarApenasRecebimento}
+                onCheckedChange={(checked) => {
+                  setMostrarApenasRecebimento(checked);
+                  resetPagination();
+                }}
+              />
               Mostrar apenas contratos de recebimento/entrada
             </label>
             <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
-              <Switch checked={mostrarAuxiliares} onCheckedChange={setMostrarAuxiliares} />
+              <Switch
+                checked={mostrarAuxiliares}
+                onCheckedChange={(checked) => {
+                  setMostrarAuxiliares(checked);
+                  resetPagination();
+                }}
+              />
               Mostrar contratos vinculados/auxiliares
             </label>
           </div>
@@ -213,12 +254,13 @@ export default function Pesquisa() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {resolvedRows.length === 0 ? (
+              {paginatedRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum contrato encontrado.</TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum contrato encontrado para os filtros informados.</TableCell>
                 </TableRow>
-              ) : resolvedRows.map(({ row: r, res }, i) => (
-                <TableRow key={r.contrato + i}>
+              ) : paginatedRows.map(({ row: r, res }, i) => (
+                // O GRL019 não expõe um ID único por linha; o índice global filtrado evita colisões visuais.
+                <TableRow key={`${r.contrato}-${pageStart + i}`}>
                   <TableCell className="font-semibold">{r.contrato}</TableCell>
                   <TableCell className="max-w-[260px] truncate">{r.nomeRazaoSocial}</TableCell>
                   <TableCell className="max-w-[180px] truncate">{r.descItem}</TableCell>
@@ -256,6 +298,55 @@ export default function Pesquisa() {
               ))}
             </TableBody>
           </Table>
+          <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Exibindo {firstResult}–{lastResult} de {resolvedRows.length} contratos
+            </span>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
+                <span>Por página</span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(value) => {
+                    setPageSize(Number(value));
+                    resetPagination();
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[88px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={String(option)}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <span className="whitespace-nowrap text-center">
+                Página {safeCurrentPage} de {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
