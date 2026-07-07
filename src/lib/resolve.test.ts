@@ -162,6 +162,44 @@ describe("resolveContrato", () => {
   });
 
 
+  it("trata RECEBIMENTO e ENTRADA como TP FATURAMENTO equivalentes", () => {
+    const rowEntrada = { ...rowBase, tpFaturamento: " entrada " };
+    const resEntradaComCadastroRecebimento = resolveContrato(
+      { ...report, rows: [rowEntrada] },
+      rowEntrada,
+      cadastros({ tipos: [tipoContrato({ tp_faturamento: "RECEBIMENTO" })] }),
+    );
+    const resRecebimentoComCadastroEntrada = resolveContrato(
+      report,
+      rowBase,
+      cadastros({ tipos: [tipoContrato({ tp_faturamento: "ENTRADA" })] }),
+    );
+
+    expect(resEntradaComCadastroRecebimento.errors).toEqual([]);
+    expect(resEntradaComCadastroRecebimento.tipoContrato?.tp_faturamento).toBe("RECEBIMENTO");
+    expect(resRecebimentoComCadastroEntrada.errors).toEqual([]);
+    expect(resRecebimentoComCadastroEntrada.tipoContrato?.tp_faturamento).toBe("ENTRADA");
+  });
+
+  it("trata EXPEDIÇÃO e SAÍDA como TP FATURAMENTO equivalentes", () => {
+    const rowSaida = { ...expedicaoRow, tpFaturamento: " saída " };
+    const res = resolveContrato(
+      { ...report, rows: [rowBase, rowSaida] },
+      rowSaida,
+      cadastros({
+        tipos: [
+          tipoContrato({ id: "rec", gera_operacao_casada: true }),
+          tipoContrato({ id: "exp", tp_faturamento: "EXPEDIÇÃO", modelo_nota_id: modelo5923.id, cfop: "5923" }),
+        ],
+      }),
+    );
+
+    expect(res.errors).toEqual([]);
+    expect(res.expedicaoVinculadaRecebimento).toBe(true);
+    expect(res.parametrizacaoSuspeitaExpedicao5923).toBe(true);
+    expect(res.podeGerar).toBe(false);
+  });
+
   it("resolve código de contrato alfanumérico sem remover letras", () => {
     const rowAlfanumerica = {
       ...rowBase,

@@ -8,6 +8,7 @@ import type {
   TipoContrato,
 } from "./types";
 import { findVinculado } from "./grl019";
+import { isExpedicaoContrato, isRecebimentoContrato, sameTpFaturamento } from "./tpFaturamento";
 
 export const SACA_KG = 60;
 export const QUANTIDADE_PADRAO = 30000;
@@ -99,7 +100,7 @@ function findTiposAtivos(tipos: TipoContrato[], cooperativaId: string, row: Grl0
       t.ativo &&
       t.cooperativa_id === cooperativaId &&
       sameContractCode(t.codigo_contrato, row.codContrato) &&
-      sameText(t.tp_faturamento, row.tpFaturamento),
+      sameTpFaturamento(t.tp_faturamento, row.tpFaturamento),
   );
 }
 
@@ -115,12 +116,12 @@ export function resolveContrato(
   const vinculado = findVinculado(report, searchedRow);
   let recebimentoRow: Grl019Row | undefined;
   let expedicaoRow: Grl019Row | undefined;
-  if (searchedRow.tpFaturamento.includes("RECEB")) {
+  if (isRecebimentoContrato(searchedRow)) {
     recebimentoRow = searchedRow;
-    expedicaoRow = vinculado?.tpFaturamento.includes("EXPED") ? vinculado : vinculado;
-  } else if (searchedRow.tpFaturamento.includes("EXPED")) {
+    expedicaoRow = vinculado && isExpedicaoContrato(vinculado) ? vinculado : vinculado;
+  } else if (isExpedicaoContrato(searchedRow)) {
     expedicaoRow = searchedRow;
-    recebimentoRow = vinculado?.tpFaturamento.includes("RECEB") ? vinculado : vinculado;
+    recebimentoRow = vinculado && isRecebimentoContrato(vinculado) ? vinculado : vinculado;
   } else {
     recebimentoRow = searchedRow;
     expedicaoRow = vinculado;
@@ -133,9 +134,9 @@ export function resolveContrato(
     errors.push(`Cooperativa "${searchedRow.empresa}" não está cadastrada ou ativa.`);
   }
 
-  const isExpedicao = searchedRow.tpFaturamento.includes("EXPED");
+  const isExpedicao = isExpedicaoContrato(searchedRow);
   const isExpedicaoVinculadaRecebimento = Boolean(
-    isExpedicao && recebimentoRow && recebimentoRow !== searchedRow && recebimentoRow.tpFaturamento.includes("RECEB"),
+    isExpedicao && recebimentoRow && recebimentoRow !== searchedRow && isRecebimentoContrato(recebimentoRow),
   );
 
   // Linha de EXPEDIÇÃO vinculada não é geração principal: a parametrização principal é a do RECEBIMENTO.
@@ -274,7 +275,7 @@ export function resolveContrato(
       produto?.ncm &&
       hasCstIcmsForPdf &&
       errors.length === 0 &&
-      !isExpedicaoVinculadaRecebimento,
+      !isExpedicao,
   );
 
   return {
