@@ -133,7 +133,11 @@ export default function Pesquisa() {
     if (res.ofereceCasada) {
       setDialog(res);
     } else {
-      generate(res, [res.cfop === "5132" ? "5132" : (res.cfop as CfopModelo)]);
+      if (!res.cfop) {
+        toast.error("Modelo sem CFOP parametrizado. Revise o cadastro de Modelos de Nota.");
+        return;
+      }
+      generate(res, [res.cfop]);
     }
   };
 
@@ -560,6 +564,7 @@ function getArmazemSource(res: ResolveResult, linkedRow?: Grl019Row) {
   // Só usa destino vinculado quando a regra/linha indica operação com vínculo, evitando sugerir produtor como armazém.
   const shouldUseLinkedDestination = Boolean(
     res.ofereceCasada ||
+      res.modelo?.tipo_destinatario === "armazem_destinatario" ||
       res.cfop === "5923" ||
       res.modelo5923 ||
       res.searchedRow.contratoVinculado,

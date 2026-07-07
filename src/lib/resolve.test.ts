@@ -217,6 +217,29 @@ describe("resolveContrato", () => {
     expect(res.warnings).not.toContain("Produto cadastrado sem NCM ou CST.");
   });
 
+  it("resolve modelo simples com CFOP parametrizado fora da lista original", () => {
+    const modelo5120: ModeloNota = {
+      ...modelo5118,
+      id: "modelo-5120",
+      cfop: "5120",
+      nome_modelo: "Modelo 5120",
+      natureza_operacao: "Venda de produção do estabelecimento",
+      tipo_destinatario: "cooperativa",
+      cst_icms_padrao: "090",
+    };
+    const res = resolveContrato(report, rowBase, cadastros({
+      modelos: [modelo5120, modelo5923],
+      produtos: [{ ...produto, cst_icms: null }],
+      tipos: [tipoContrato({ cfop: "5120", modelo_nota_id: modelo5120.id })],
+    }));
+
+    expect(res.errors).toEqual([]);
+    expect(res.cfop).toBe("5120");
+    expect(res.modelo?.id).toBe("modelo-5120");
+    expect(res.ofereceCasada).toBe(false);
+    expect(res.podeGerar).toBe(true);
+  });
+
   it("bloqueia duplicidade ativa para mesma cooperativa, código e TP FATURAMENTO", () => {
     const res = resolveContrato(report, rowBase, cadastros({
       tipos: [tipoContrato({ id: "a" }), tipoContrato({ id: "b" })],
