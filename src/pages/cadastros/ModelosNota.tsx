@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Copy, Plus, Pencil, Trash2, Search } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { AtivoBadge } from "@/components/cadastro/CrudPage";
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,7 @@ export default function ModelosNota() {
   const [tab, setTab] = useState("dados");
   const [form, setForm] = useState<ModeloForm>(EMPTY);
   const [financeDraft, setFinanceDraft] = useState({ quantidade: "", valorUnitario: "", valorTotal: "", fatorDolar: "" });
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [q, setQ] = useState("");
   const [delId, setDelId] = useState<string | null>(null);
 
@@ -106,12 +107,14 @@ export default function ModelosNota() {
   }, [data, q]);
 
   const openNew = () => {
+    setIsDuplicating(false);
     setForm({ ...EMPTY });
     setFinanceDraft({ quantidade: "", valorUnitario: "", valorTotal: "", fatorDolar: "" });
     setTab("dados");
     setOpen(true);
   };
   const openEdit = (row: ModeloNota) => {
+    setIsDuplicating(false);
     setForm({ ...row, cooperativa_ids: row.cooperativa_ids ?? [] });
     setFinanceDraft({
       quantidade: row.quantidade_padrao == null ? "" : String(row.quantidade_padrao),
@@ -121,6 +124,26 @@ export default function ModelosNota() {
     });
     setTab("dados");
     setOpen(true);
+  };
+  const openDuplicate = (row: ModeloNota) => {
+    const { id: _id, created_at: _createdAt, updated_at: _updatedAt, ...copy } = row;
+
+    setIsDuplicating(true);
+    // Duplicação preenche o mesmo formulário, mas diferencia o nome e remove campos de controle para salvar como novo cadastro.
+    setForm({ ...EMPTY, ...copy, nome_modelo: `${row.nome_modelo} - Cópia`, cooperativa_ids: row.cooperativa_ids ?? [] });
+    setFinanceDraft({
+      quantidade: row.quantidade_padrao == null ? "" : String(row.quantidade_padrao),
+      valorUnitario: row.valor_unitario_padrao == null ? "" : formatUnitValueBR(row.valor_unitario_padrao),
+      valorTotal: row.valor_total_padrao == null ? "" : formatCurrencyBR(row.valor_total_padrao),
+      fatorDolar: row.fator_conversao_dolar == null ? "" : formatFactorBR(row.fator_conversao_dolar),
+    });
+    setTab("dados");
+    setOpen(true);
+  };
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    // Ao fechar o modal, limpa o estado visual para não contaminar os fluxos de Novo/Editar.
+    if (!nextOpen) setIsDuplicating(false);
   };
 
   const coopName = (id: string) => coops.find((c) => c.id === id)?.razao_social ?? "-";
@@ -165,6 +188,7 @@ export default function ModelosNota() {
     }
     await save.mutateAsync(form);
     setOpen(false);
+    setIsDuplicating(false);
   };
 
   return (
@@ -198,7 +222,7 @@ export default function ModelosNota() {
                 <TableHead>Frete padrão</TableHead>
                 <TableHead>CST ICMS</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-24 text-right">Ações</TableHead>
+                <TableHead className="w-32 text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -231,6 +255,15 @@ export default function ModelosNota() {
                         <Button size="icon" variant="ghost" onClick={() => openEdit(row)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Duplicar modelo"
+                          aria-label="Duplicar modelo"
+                          onClick={() => openDuplicate(row)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
                         <Button size="icon" variant="ghost" onClick={() => setDelId(row.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -244,10 +277,10 @@ export default function ModelosNota() {
         </div>
 
         {/* Modal modernizado em abas: Dados, Cooperativas liberadas e Dados adicionais. */}
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
             <DialogHeader>
-              <DialogTitle>{form.id ? "Editar" : "Novo"} — Modelo de Nota</DialogTitle>
+              <DialogTitle>{isDuplicating ? "Duplicar" : form.id ? "Editar" : "Novo"} — Modelo de Nota</DialogTitle>
             </DialogHeader>
 
             <Tabs value={tab} onValueChange={setTab}>
