@@ -6,9 +6,10 @@ import type { Cooperativa, Armazem, Produto, ModeloNota, TipoContrato, Grl019Rep
 
 type TableName = "cooperativas" | "armazens" | "produtos" | "modelos_nota" | "tipos_contrato";
 
-function useList<T>(table: TableName, orderBy = "created_at") {
+function useList<T>(table: TableName, orderBy = "created_at", enabled = true) {
   return useQuery({
     queryKey: [table],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase.from(table).select("*").order(orderBy, { ascending: false });
       if (error) throw error;
@@ -187,11 +188,11 @@ export async function syncArmazensFromGrl019(report: Grl019Report): Promise<Sync
   return result;
 }
 
-export const useCooperativas = () => useList<Cooperativa>("cooperativas", "razao_social");
+export const useCooperativas = (enabled = true) => useList<Cooperativa>("cooperativas", "razao_social", enabled);
 export const useSaveCooperativa = () => useUpsert<Cooperativa>("cooperativas");
 export const useDeleteCooperativa = () => useRemove("cooperativas");
 
-export const useArmazens = () => useList<Armazem>("armazens", "razao_social");
+export const useArmazens = (enabled = true) => useList<Armazem>("armazens", "razao_social", enabled);
 export const useSaveArmazem = () => useUpsert<Armazem>("armazens");
 export const useDeleteArmazem = () => useRemove("armazens");
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, Navigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Copy, Download } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Copy, Download, Search } from "lucide-react";
 import type { Nota } from "@/lib/nota";
+import type { Armazem, Cooperativa } from "@/lib/types";
 import { buildNotaPdfFileName, createManualCloneFromPreview, syncPlacaCavaloPlaceholder, type NotaParty } from "@/lib/nota";
 import { generatePdf } from "@/lib/pdf";
 import { TIPO_FRETE_OPTIONS, normalizeTipoFrete } from "@/lib/tipoFrete";
 import { toast } from "sonner";
+import { useArmazens, useCooperativas } from "@/lib/db";
 import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "@/lib/numberFormat";
 
 export default function Preview() {
@@ -24,10 +28,15 @@ export default function Preview() {
     (state?.notas ?? []).map((nota) => ({ ...nota, tpFrete: normalizeTipoFrete(nota.tpFrete) })),
   );
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [cadastroSearchIdx, setCadastroSearchIdx] = useState<number | null>(null);
+  const isCadastroSearchOpen = cadastroSearchIdx !== null;
+  const { data: cooperativas = [], isLoading: loadingCooperativas } = useCooperativas(isCadastroSearchOpen);
+  const { data: armazens = [], isLoading: loadingArmazens } = useArmazens(isCadastroSearchOpen);
 
   if (!state || notas.length === 0) return <Navigate to="/pesquisa" replace />;
 
-  const isManualClone = notas.some((nota) => nota.isManualClone || nota.sourceType === "manual_clone");
+  const isManualNota = (nota: Nota) => nota.isManualClone || nota.sourceType === "manual_clone";
+  const isManualClone = notas.some(isManualNota);
 
   const update = (idx: number, patch: Partial<Nota>, recalc: "unitario" | "total" | "none" = "none") => {
     setNotas((prev) => prev.map((n, i) => {
@@ -73,7 +82,7 @@ export default function Preview() {
   const isBlank = (value: string | undefined | null) => !value?.trim();
 
   const hasMissingOptionalManualInfo = (nota: Nota) =>
-    nota.isManualClone && (
+    isManualNota(nota) && (
       isBlank(nota.emitente.cpfCnpj) ||
       isBlank(nota.emitente.ie) ||
       isBlank(nota.emitente.municipio) ||
@@ -91,7 +100,7 @@ export default function Preview() {
   };
 
   const gerarPdfConfirmado = () => {
-    const primeiraNotaComPlaceholder = notas.find((n) => n.isManualClone && hasPendingPlaceholders(n));
+    const primeiraNotaComPlaceholder = notas.find((n) => isManualNota(n) && hasPendingPlaceholders(n));
     if (primeiraNotaComPlaceholder) {
       toast.warning("Há placeholders pendentes nos dados adicionais. Revise antes de usar o PDF orientativo.");
     }
@@ -119,7 +128,7 @@ export default function Preview() {
     if (primeiraNotaSemValorTotal) {
       return toast.error(`Modelo CFOP ${primeiraNotaSemValorTotal.cfop}: informe valor total válido antes de gerar o PDF.`);
     }
-    const primeiraNotaSemPartes = notas.find((n) => n.isManualClone && (isBlank(n.emitente.nome) || isBlank(n.destinatario.nome) || isBlank(n.produto.descricao)));
+    const primeiraNotaSemPartes = notas.find((n) => isManualNota(n) && (isBlank(n.emitente.nome) || isBlank(n.destinatario.nome) || isBlank(n.produto.descricao)));
     if (primeiraNotaSemPartes) {
       return toast.error(`Modelo CFOP ${primeiraNotaSemPartes.cfop || "sem CFOP"}: informe emitente, destinatário e produto antes de gerar o PDF.`);
     }
@@ -167,7 +176,7 @@ export default function Preview() {
               <Card className="shadow-card">
                 <CardHeader><CardTitle className="text-base">{n.nomeModelo} — {n.naturezaOperacao}</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {n.isManualClone && (
+                  {isManualNota(n) && (
                     <>
                       <F label="Modelo" value={n.nomeModelo} onChange={(v) => update(i, { nomeModelo: v }, "none")} />
                       <F label="CFOP" value={n.cfop} onChange={(v) => update(i, { cfop: v }, "none")} />
@@ -201,7 +210,7 @@ export default function Preview() {
                         toast.error("Informe uma quantidade maior que zero para calcular o valor unitário.");
                         return;
                       }
-                      update(i, { valorTotal: parsed }, n.isManualClone ? "none" : "total");
+                      update(i, { valorTotal: parsed }, isManualNota(n) ? "none" : "total");
                     }}
                     onBlur={() => clearDraft(i, "valorTotal")}
                   />
@@ -214,10 +223,19 @@ export default function Preview() {
               <Card className="shadow-card">
                 <CardHeader><CardTitle className="text-base">Emitente / Destinatário</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {n.isManualClone ? (
+                  {isManualNota(n) ? (
                     <>
                       <PartyFields title="Emitente (Produtor)" party={n.emitente} onChange={(emitente) => update(i, { emitente }, "none")} />
-                      <PartyFields title="Destinatário" party={n.destinatario} onChange={(destinatario) => update(i, { destinatario }, "none")} />
+                      <PartyFields
+                        title="Destinatário"
+                        party={n.destinatario}
+                        action={
+                          <Button type="button" variant="outline" size="sm" onClick={() => setCadastroSearchIdx(i)}>
+                            <Search className="mr-1 h-3.5 w-3.5" /> Buscar cadastro
+                          </Button>
+                        }
+                        onChange={(destinatario) => update(i, { destinatario }, "none")}
+                      />
                     </>
                   ) : (
                     <>
@@ -238,7 +256,7 @@ export default function Preview() {
                 </CardContent>
               </Card>
 
-              {n.isManualClone && (
+              {isManualNota(n) && (
                 <Card className="shadow-card">
                   <CardHeader><CardTitle className="text-base">Produto</CardTitle></CardHeader>
                   <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -266,16 +284,34 @@ export default function Preview() {
         </Tabs>
       </div>
 
+      <CadastroDestinatarioDialog
+        open={isCadastroSearchOpen}
+        cooperativas={cooperativas}
+        armazens={armazens}
+        loading={loadingCooperativas || loadingArmazens}
+        onOpenChange={(open) => {
+          if (!open) setCadastroSearchIdx(null);
+        }}
+        onSelect={(party) => {
+          if (cadastroSearchIdx == null) return;
+          update(cadastroSearchIdx, { destinatario: party }, "none");
+          setCadastroSearchIdx(null);
+          toast.success("Destinatário preenchido com os dados do cadastro selecionado.");
+        }}
+      />
     </Layout>
   );
 }
 
-function PartyFields({ title, party, onChange }: { title: string; party: NotaParty; onChange: (party: NotaParty) => void }) {
+function PartyFields({ title, party, action, onChange }: { title: string; party: NotaParty; action?: ReactNode; onChange: (party: NotaParty) => void }) {
   const setField = (field: keyof NotaParty, value: string) => onChange({ ...party, [field]: value });
 
   return (
     <div className="rounded-md border p-3">
-      <div className="mb-3 font-semibold text-primary">{title}</div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="font-semibold text-primary">{title}</div>
+        {action}
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <F label="Nome/Razão social" value={party.nome} onChange={(v) => setField("nome", v)} />
         <F label="CPF/CNPJ" value={party.cpfCnpj} onChange={(v) => setField("cpfCnpj", v)} />
@@ -287,6 +323,183 @@ function PartyFields({ title, party, onChange }: { title: string; party: NotaPar
         <F label="UF" value={party.uf} onChange={(v) => setField("uf", v)} />
       </div>
     </div>
+  );
+}
+
+type CadastroDestinatarioRow = {
+  id: string;
+  nome: string;
+  cpfCnpj: string;
+  municipio: string;
+  uf: string;
+  origem: "Cooperativa" | "Armazém/Destinatário";
+  party: NotaParty;
+  searchText: string;
+};
+
+const normalizeSearch = (value: string | null | undefined) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
+
+function partyFromCadastro(row: Cooperativa | Armazem, origem: CadastroDestinatarioRow["origem"]): NotaParty {
+  if (origem === "Cooperativa") {
+    const cooperativa = row as Cooperativa;
+    return {
+      nome: cooperativa.razao_social || cooperativa.nome_grl019 || "",
+      cpfCnpj: cooperativa.cnpj ?? "",
+      ie: cooperativa.inscricao_estadual ?? "",
+      endereco: cooperativa.endereco ?? "",
+      bairro: cooperativa.bairro ?? "",
+      cep: cooperativa.cep ?? "",
+      municipio: cooperativa.municipio ?? "",
+      uf: cooperativa.uf ?? "",
+    };
+  }
+
+  const armazem = row as Armazem;
+  return {
+    nome: armazem.razao_social ?? "",
+    cpfCnpj: armazem.cnpj_cpf ?? "",
+    ie: armazem.inscricao_estadual ?? "",
+    endereco: armazem.endereco ?? "",
+    bairro: armazem.bairro ?? "",
+    cep: armazem.cep ?? "",
+    municipio: armazem.municipio ?? "",
+    uf: armazem.uf ?? "",
+  };
+}
+
+function CadastroDestinatarioDialog({
+  open,
+  cooperativas,
+  armazens,
+  loading,
+  onOpenChange,
+  onSelect,
+}: {
+  open: boolean;
+  cooperativas: Cooperativa[];
+  armazens: Armazem[];
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (party: NotaParty) => void;
+}) {
+  const [q, setQ] = useState("");
+
+  const rows = useMemo<CadastroDestinatarioRow[]>(() => {
+    const cooperativaRows = cooperativas
+      .filter((cooperativa) => cooperativa.ativo !== false)
+      .map((cooperativa) => {
+        const party = partyFromCadastro(cooperativa, "Cooperativa");
+        return {
+          id: `cooperativa-${cooperativa.id}`,
+          nome: party.nome,
+          cpfCnpj: party.cpfCnpj,
+          municipio: party.municipio,
+          uf: party.uf,
+          origem: "Cooperativa" as const,
+          party,
+          searchText: [cooperativa.razao_social, cooperativa.nome_grl019, cooperativa.cnpj, cooperativa.municipio, cooperativa.uf]
+            .map(normalizeSearch)
+            .join(""),
+        };
+      });
+
+    const armazemRows = armazens
+      .filter((armazem) => armazem.ativo !== false)
+      .map((armazem) => {
+        const party = partyFromCadastro(armazem, "Armazém/Destinatário");
+        return {
+          id: `armazem-${armazem.id}`,
+          nome: party.nome,
+          cpfCnpj: party.cpfCnpj,
+          municipio: party.municipio,
+          uf: party.uf,
+          origem: "Armazém/Destinatário" as const,
+          party,
+          searchText: [armazem.razao_social, armazem.cnpj_cpf, armazem.municipio, armazem.uf]
+            .map(normalizeSearch)
+            .join(""),
+        };
+      });
+
+    return [...cooperativaRows, ...armazemRows].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
+  }, [armazens, cooperativas]);
+
+  const filtered = useMemo(() => {
+    const term = normalizeSearch(q).trim();
+    if (!term) return rows;
+    return rows.filter((row) => row.searchText.includes(term));
+  }, [q, rows]);
+
+  const select = (party: NotaParty) => {
+    onSelect(party);
+    setQ("");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Buscar cadastro do destinatário</DialogTitle>
+          <DialogDescription>
+            Selecione um cadastro para preencher o destinatário da nota avulsa. Os campos continuarão editáveis após a seleção.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por nome, CPF/CNPJ, município ou UF..."
+              className="pl-9"
+            />
+          </div>
+          <div className="max-h-[420px] overflow-auto rounded-md border">
+            <Table className="min-w-[720px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>CNPJ/CPF</TableHead>
+                  <TableHead>Município/UF</TableHead>
+                  <TableHead>Origem</TableHead>
+                  <TableHead className="w-24 text-right">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">Carregando...</TableCell>
+                  </TableRow>
+                ) : filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">Nenhum cadastro encontrado.</TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="font-medium">{row.nome || "-"}</TableCell>
+                      <TableCell>{row.cpfCnpj || "-"}</TableCell>
+                      <TableCell>{[row.municipio, row.uf].filter(Boolean).join("/") || "-"}</TableCell>
+                      <TableCell>{row.origem}</TableCell>
+                      <TableCell className="text-right">
+                        <Button type="button" size="sm" variant="outline" onClick={() => select(row.party)}>
+                          Selecionar
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
