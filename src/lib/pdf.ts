@@ -18,6 +18,7 @@ const ORIENTATIVE_TITLE = "MODELO ORIENTATIVO - SEM VALIDADE FISCAL";
 const ORIENTATIVE_TEXT =
   "Este documento é um modelo orientativo para emissão da Nota Fiscal pelo produtor rural. Não possui validade fiscal como NF-e.";
 const FOOTER_TEXT = "Gerado por JM Assessoria e Contabilidade MT - www.jmassessoriamt.com.br";
+const MANUAL_CLONE_ORIGIN_TEXT = "Origem: modelo avulso preenchido/editado manualmente.";
 
 type ProdutoPdf = Nota["produto"] & {
   codigo?: string | null;
@@ -65,7 +66,8 @@ function drawFooter(doc: jsPDF, ctx: DrawContext) {
   const padding = 2;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.6);
-  const textLines = doc.splitTextToSize(ORIENTATIVE_TEXT, ctx.contentWidth - padding * 2);
+  const footerText = ORIENTATIVE_TEXT;
+  const textLines = doc.splitTextToSize(footerText, ctx.contentWidth - padding * 2);
   const bandH = padding + 3 + textLines.length * lineH + 1.2;
   const y = ctx.pageHeight - 11 - bandH;
 
@@ -273,6 +275,12 @@ function drawHeaderAndDanfe(doc: jsPDF, ctx: DrawContext, nota: Nota) {
   doc.text(`${valueOrDash(nota.emitente.municipio)} - ${valueOrDash(nota.emitente.uf)}`, leftX + leftW / 2, y + 24, {
     align: "center",
   });
+  if (nota.isManualClone) {
+    doc.setTextColor(95, 105, 120);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.4);
+    doc.text(MANUAL_CLONE_ORIGIN_TEXT, leftX + leftW / 2, y + 28, { align: "center" });
+  }
 
   doc.setTextColor(18, 24, 35);
   doc.setFont("helvetica", "bold");

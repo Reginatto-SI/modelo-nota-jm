@@ -23,6 +23,8 @@ export interface NotaPdfFileNameMeta {
   produtorNome: string;
 }
 
+export type NotaSourceType = "grl019" | "manual_clone";
+
 export interface Nota {
   cfop: string;
   nomeModelo: string;
@@ -43,6 +45,10 @@ export interface Nota {
   observacao: string;
   pdfFileNameMeta?: NotaPdfFileNameMeta;
   requiresManualValorUnitario?: boolean;
+  sourceType?: NotaSourceType;
+  isManualClone?: boolean;
+  originalSourceType?: NotaSourceType;
+  originalContract?: string | null;
 }
 
 function todayISO() {
@@ -67,6 +73,20 @@ function sanitizePdfFileName(value: string) {
     .replace(/^[ .-]+|[ .-]+$/g, "");
 
   return `${sanitized || "modelo-nota-jm"}.pdf`;
+}
+
+export function createManualCloneFromPreview(previewData: Nota): Nota {
+  // Cópia profunda para o modo avulso não manter referências com a prévia montada pelo GRL019.
+  // O objeto Nota é composto apenas por dados serializáveis; JSON evita risco de compatibilidade
+  // com navegadores/ambientes que ainda não exponham structuredClone.
+  const clone = JSON.parse(JSON.stringify(previewData)) as Nota;
+  return {
+    ...clone,
+    sourceType: "manual_clone",
+    isManualClone: true,
+    originalSourceType: previewData.sourceType ?? "grl019",
+    originalContract: previewData.pdfFileNameMeta?.contrato ?? null,
+  };
 }
 
 export function buildNotaPdfFileName(nota: Nota) {
@@ -532,6 +552,8 @@ export function buildNota(r: ResolveResult, which: CfopModelo, modelo: ModeloNot
     observacao: rec.observacao,
     // Metadados vindos da mesma resolução usada no modelo/prévia para nomear o PDF sem criar fonte paralela.
     requiresManualValorUnitario: valorUnitario <= 0,
+    sourceType: "grl019",
+    isManualClone: false,
     pdfFileNameMeta: {
       contrato: r.searchedRow.contrato,
       contratoVinculado: r.searchedRow.contratoVinculado,

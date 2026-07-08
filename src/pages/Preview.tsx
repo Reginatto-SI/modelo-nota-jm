@@ -8,9 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download } from "lucide-react";
+import { Copy, Download } from "lucide-react";
 import type { Nota } from "@/lib/nota";
-import { buildNotaPdfFileName, syncPlacaCavaloPlaceholder } from "@/lib/nota";
+import { buildNotaPdfFileName, createManualCloneFromPreview, syncPlacaCavaloPlaceholder, type NotaParty } from "@/lib/nota";
 import { generatePdf } from "@/lib/pdf";
 import { TIPO_FRETE_OPTIONS, normalizeTipoFrete } from "@/lib/tipoFrete";
 import { toast } from "sonner";
@@ -27,13 +27,18 @@ export default function Preview() {
 
   if (!state || notas.length === 0) return <Navigate to="/pesquisa" replace />;
 
-  const update = (idx: number, patch: Partial<Nota>, recalc: "unitario" | "total" = "unitario") => {
+  const isManualClone = notas.some((nota) => nota.isManualClone || nota.sourceType === "manual_clone");
+
+  const update = (idx: number, patch: Partial<Nota>, recalc: "unitario" | "total" | "none" = "none") => {
     setNotas((prev) => prev.map((n, i) => {
       if (i !== idx) return n;
       const merged = { ...n, ...patch };
       if (patch.placaVeiculo != null) {
         // Sincroniza apenas o placeholder imediato da placa; nunca substitui o restante da linha.
         merged.dadosAdicionais = syncPlacaCavaloPlaceholder(merged.dadosAdicionais, patch.placaVeiculo);
+      }
+      if (recalc === "none") {
+        return merged;
       }
       if (recalc === "total") {
         if (merged.quantidade > 0) merged.valorUnitario = merged.valorTotal / merged.quantidade;
@@ -56,6 +61,29 @@ export default function Preview() {
     });
   };
 
+
+  const duplicarComoAvulso = () => {
+    if (isManualClone) return;
+    setNotas((prev) => prev.map((nota) => createManualCloneFromPreview(nota)));
+    toast.success("Modelo duplicado como avulso. A partir de agora, os campos são editáveis e o PDF será gerado com as informações digitadas pelo usuário.");
+  };
+
+  const hasPendingPlaceholders = (nota: Nota) => /{{[^}]+}}/.test(nota.dadosAdicionais);
+
+  const isBlank = (value: string | undefined | null) => !value?.trim();
+
+  const hasMissingOptionalManualInfo = (nota: Nota) =>
+    nota.isManualClone && (
+      isBlank(nota.emitente.cpfCnpj) ||
+      isBlank(nota.emitente.ie) ||
+      isBlank(nota.emitente.municipio) ||
+      isBlank(nota.emitente.uf) ||
+      isBlank(nota.destinatario.cpfCnpj) ||
+      isBlank(nota.destinatario.ie) ||
+      isBlank(nota.destinatario.municipio) ||
+      isBlank(nota.destinatario.uf)
+    );
+
   const gerarPdfs = () => {
     // Cada aba/modelo vira um PDF próprio; não une CFOPs diferentes no mesmo arquivo.
     notas.forEach((nota) => generatePdf([nota], buildNotaPdfFileName(nota)));
@@ -63,6 +91,14 @@ export default function Preview() {
   };
 
   const gerarPdfConfirmado = () => {
+    const primeiraNotaComPlaceholder = notas.find((n) => n.isManualClone && hasPendingPlaceholders(n));
+    if (primeiraNotaComPlaceholder) {
+      toast.warning("Há placeholders pendentes nos dados adicionais. Revise antes de usar o PDF orientativo.");
+    }
+    const primeiraNotaComCadastroIncompleto = notas.find(hasMissingOptionalManualInfo);
+    if (primeiraNotaComCadastroIncompleto) {
+      toast.warning("Há CPF/CNPJ, IE, município ou UF em branco no modo avulso. Revise se essas informações devem aparecer no PDF.");
+    }
     const primeiraNotaSemCfop = notas.find((n) => !n.cfop?.trim());
     if (primeiraNotaSemCfop) {
       return toast.error("Modelo sem CFOP parametrizado. Revise o cadastro de Modelos de Nota antes de gerar o PDF.");
@@ -83,6 +119,10 @@ export default function Preview() {
     if (primeiraNotaSemValorTotal) {
       return toast.error(`Modelo CFOP ${primeiraNotaSemValorTotal.cfop}: informe valor total válido antes de gerar o PDF.`);
     }
+    const primeiraNotaSemPartes = notas.find((n) => n.isManualClone && (isBlank(n.emitente.nome) || isBlank(n.destinatario.nome) || isBlank(n.produto.descricao)));
+    if (primeiraNotaSemPartes) {
+      return toast.error(`Modelo CFOP ${primeiraNotaSemPartes.cfop || "sem CFOP"}: informe emitente, destinatário e produto antes de gerar o PDF.`);
+    }
     const primeiraNotaSemProdutoFiscal = notas.find((n) => !n.produto.ncm?.trim() || !n.produto.cst?.trim());
     if (primeiraNotaSemProdutoFiscal) {
       return toast.error(`Modelo CFOP ${primeiraNotaSemProdutoFiscal.cfop}: produto/modelo sem NCM ou CST. Revise o cadastro antes de gerar o PDF.`);
@@ -101,9 +141,20 @@ export default function Preview() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => navigate("/pesquisa")}>Voltar</Button>
+            {!isManualClone && (
+              <Button variant="secondary" onClick={duplicarComoAvulso}>
+                <Copy className="mr-1 h-4 w-4" /> Duplicar como avulso
+              </Button>
+            )}
             <Button onClick={gerarPdfConfirmado}><Download className="mr-1 h-4 w-4" /> Gerar PDF</Button>
           </div>
         </div>
+
+        {isManualClone && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Modo avulso/manual: revise os dados antes de gerar o PDF. O sistema usará as informações digitadas nesta tela.
+          </div>
+        )}
 
         <Tabs defaultValue="0">
           <TabsList>
@@ -116,10 +167,17 @@ export default function Preview() {
               <Card className="shadow-card">
                 <CardHeader><CardTitle className="text-base">{n.nomeModelo} — {n.naturezaOperacao}</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {n.isManualClone && (
+                    <>
+                      <F label="Modelo" value={n.nomeModelo} onChange={(v) => update(i, { nomeModelo: v }, "none")} />
+                      <F label="CFOP" value={n.cfop} onChange={(v) => update(i, { cfop: v }, "none")} />
+                      <F label="Natureza da operação" value={n.naturezaOperacao} onChange={(v) => update(i, { naturezaOperacao: v }, "none")} />
+                    </>
+                  )}
                   <F label="Data emissão" type="date" value={n.dataEmissao} onChange={(v) => update(i, { dataEmissao: v })} />
                   <F label="Data saída" type="date" value={n.dataSaida} onChange={(v) => update(i, { dataSaida: v })} />
                   <F label="Hora saída" value={n.horaSaida} onChange={(v) => update(i, { horaSaida: v })} />
-                  <F label="Quantidade (KG)" type="number" value={String(n.quantidade)} onChange={(v) => update(i, { quantidade: Number(v) })} />
+                  <F label="Quantidade (KG)" type="number" value={String(n.quantidade)} onChange={(v) => update(i, { quantidade: Number(v) }, "unitario")} />
                   <MoneyField
                     label="Valor unitário (R$/KG)"
                     placeholder="Ex.: 0,633333"
@@ -127,7 +185,7 @@ export default function Preview() {
                     onChange={(v) => {
                       setDraft(i, "valorUnitario", v);
                       const parsed = parseDecimalBR(v);
-                      if (parsed != null) update(i, { valorUnitario: parsed });
+                      if (parsed != null) update(i, { valorUnitario: parsed }, "unitario");
                     }}
                     onBlur={() => clearDraft(i, "valorUnitario")}
                   />
@@ -143,7 +201,7 @@ export default function Preview() {
                         toast.error("Informe uma quantidade maior que zero para calcular o valor unitário.");
                         return;
                       }
-                      update(i, { valorTotal: parsed }, "total");
+                      update(i, { valorTotal: parsed }, n.isManualClone ? "none" : "total");
                     }}
                     onBlur={() => clearDraft(i, "valorTotal")}
                   />
@@ -156,20 +214,42 @@ export default function Preview() {
               <Card className="shadow-card">
                 <CardHeader><CardTitle className="text-base">Emitente / Destinatário</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="rounded-md border p-3 text-sm">
-                    <div className="mb-1 font-semibold text-primary">Emitente (Produtor)</div>
-                    <div>{n.emitente.nome}</div>
-                    <div className="text-muted-foreground">{n.emitente.cpfCnpj} · IE {n.emitente.ie || "-"}</div>
-                    <div className="text-muted-foreground">{n.emitente.municipio}/{n.emitente.uf}</div>
-                  </div>
-                  <div className="rounded-md border p-3 text-sm">
-                    <div className="mb-1 font-semibold text-primary">Destinatário</div>
-                    <div>{n.destinatario.nome}</div>
-                    <div className="text-muted-foreground">{n.destinatario.cpfCnpj} · IE {n.destinatario.ie || "-"}</div>
-                    <div className="text-muted-foreground">{n.destinatario.municipio}/{n.destinatario.uf}</div>
-                  </div>
+                  {n.isManualClone ? (
+                    <>
+                      <PartyFields title="Emitente (Produtor)" party={n.emitente} onChange={(emitente) => update(i, { emitente }, "none")} />
+                      <PartyFields title="Destinatário" party={n.destinatario} onChange={(destinatario) => update(i, { destinatario }, "none")} />
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-md border p-3 text-sm">
+                        <div className="mb-1 font-semibold text-primary">Emitente (Produtor)</div>
+                        <div>{n.emitente.nome}</div>
+                        <div className="text-muted-foreground">{n.emitente.cpfCnpj} · IE {n.emitente.ie || "-"}</div>
+                        <div className="text-muted-foreground">{n.emitente.municipio}/{n.emitente.uf}</div>
+                      </div>
+                      <div className="rounded-md border p-3 text-sm">
+                        <div className="mb-1 font-semibold text-primary">Destinatário</div>
+                        <div>{n.destinatario.nome}</div>
+                        <div className="text-muted-foreground">{n.destinatario.cpfCnpj} · IE {n.destinatario.ie || "-"}</div>
+                        <div className="text-muted-foreground">{n.destinatario.municipio}/{n.destinatario.uf}</div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
+
+              {n.isManualClone && (
+                <Card className="shadow-card">
+                  <CardHeader><CardTitle className="text-base">Produto</CardTitle></CardHeader>
+                  <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <F label="Código do produto" value={n.produto.codigo} onChange={(v) => update(i, { produto: { ...n.produto, codigo: v } }, "none")} />
+                    <F label="Descrição" value={n.produto.descricao} onChange={(v) => update(i, { produto: { ...n.produto, descricao: v } }, "none")} />
+                    <F label="NCM" value={n.produto.ncm} onChange={(v) => update(i, { produto: { ...n.produto, ncm: v } }, "none")} />
+                    <F label="CST" value={n.produto.cst} onChange={(v) => update(i, { produto: { ...n.produto, cst: v } }, "none")} />
+                    <F label="Unidade" value={n.produto.unidade} onChange={(v) => update(i, { produto: { ...n.produto, unidade: v } }, "none")} />
+                  </CardContent>
+                </Card>
+              )}
 
               <Card className="shadow-card">
                 <CardHeader><CardTitle className="text-base">Dados adicionais</CardTitle></CardHeader>
@@ -187,6 +267,26 @@ export default function Preview() {
       </div>
 
     </Layout>
+  );
+}
+
+function PartyFields({ title, party, onChange }: { title: string; party: NotaParty; onChange: (party: NotaParty) => void }) {
+  const setField = (field: keyof NotaParty, value: string) => onChange({ ...party, [field]: value });
+
+  return (
+    <div className="rounded-md border p-3">
+      <div className="mb-3 font-semibold text-primary">{title}</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <F label="Nome/Razão social" value={party.nome} onChange={(v) => setField("nome", v)} />
+        <F label="CPF/CNPJ" value={party.cpfCnpj} onChange={(v) => setField("cpfCnpj", v)} />
+        <F label="Inscrição estadual" value={party.ie} onChange={(v) => setField("ie", v)} />
+        <F label="Endereço" value={party.endereco} onChange={(v) => setField("endereco", v)} />
+        <F label="Bairro" value={party.bairro} onChange={(v) => setField("bairro", v)} />
+        <F label="CEP" value={party.cep} onChange={(v) => setField("cep", v)} />
+        <F label="Município" value={party.municipio} onChange={(v) => setField("municipio", v)} />
+        <F label="UF" value={party.uf} onChange={(v) => setField("uf", v)} />
+      </div>
+    </div>
   );
 }
 
