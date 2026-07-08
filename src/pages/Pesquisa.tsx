@@ -44,7 +44,7 @@ function digits(value: unknown) {
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 // Busca principal operacional: mantém a pesquisa focada nos campos usados para localizar o contrato.
-function smartSearchMatches(row: Grl019Row, term: string) {
+function smartSearchMatches(row: Grl019Row, res: ResolveResult, term: string) {
   if (!term.trim()) return true;
   const normalizedTerm = normalize(term);
   const digitTerm = digits(term);
@@ -54,6 +54,11 @@ function smartSearchMatches(row: Grl019Row, term: string) {
     row.nomeRazaoSocial,
     row.cpfCnpj,
     row.descItem,
+    // Permite pesquisar pelo modelo fiscal já resolvido para a linha, sem criar um filtro separado.
+    res.modelo?.cfop,
+    res.modelo?.nome_modelo,
+    res.modelo5923?.cfop,
+    res.modelo5923?.nome_modelo,
   ];
 
   return searchable.some((value) => normalize(value).includes(normalizedTerm)) ||
@@ -92,9 +97,9 @@ export default function Pesquisa() {
     if (!report) return [];
     // Reaproveita a classificação centralizada da resolução para ocultar somente linhas auxiliares/vinculadas.
     return report.rows
-      .filter((row) => smartSearchMatches(row, q))
       .filter((row) => !mostrarApenasRecebimento || isRecebimentoContrato(row))
       .map((row) => ({ row, res: resolveContrato(report, row, cad) }))
+      .filter(({ row, res }) => smartSearchMatches(row, res, q))
       .filter(({ row, res }) => mostrarAuxiliares || !isContratoAuxiliar(res) || isBuscaContratoExato(row, q));
   }, [cad, mostrarApenasRecebimento, mostrarAuxiliares, report, q]);
 
@@ -196,7 +201,7 @@ export default function Pesquisa() {
           {/* Título alinhado à finalidade real da tela: localizar contrato e gerar o modelo. */}
           <h1 className="text-2xl font-bold">Gerar Modelo de Nota</h1>
           <p className="text-sm text-muted-foreground">
-            Localize o contrato por número, produtor, CPF/CNPJ ou produto e gere o modelo de nota.
+            Localize o contrato por número, produtor, CPF/CNPJ, produto ou modelo e gere o modelo de nota.
           </p>
         </div>
 
@@ -209,7 +214,7 @@ export default function Pesquisa() {
                 setQ(e.target.value);
                 resetPagination();
               }}
-              placeholder="Pesquisar contrato, agricultor ou CPF/CNPJ..."
+              placeholder="Pesquisar contrato, agricultor, CPF/CNPJ ou modelo..."
               className="pl-9"
             />
           </div>
