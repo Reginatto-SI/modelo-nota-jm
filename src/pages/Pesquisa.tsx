@@ -54,6 +54,7 @@ function smartSearchMatches(row: Grl019Row, res: ResolveResult, term: string) {
     row.nomeRazaoSocial,
     row.cpfCnpj,
     row.descItem,
+    row.observacao,
     // Permite pesquisar pelo modelo fiscal já resolvido para a linha, sem criar um filtro separado.
     res.modelo?.cfop,
     res.modelo?.nome_modelo,
@@ -201,7 +202,7 @@ export default function Pesquisa() {
           {/* Título alinhado à finalidade real da tela: localizar contrato e gerar o modelo. */}
           <h1 className="text-2xl font-bold">Gerar Modelo de Nota</h1>
           <p className="text-sm text-muted-foreground">
-            Localize o contrato por número, produtor, CPF/CNPJ, produto ou modelo e gere o modelo de nota.
+            Localize o contrato por número, produtor, CPF/CNPJ, produto, observação ou modelo e gere o modelo de nota.
           </p>
         </div>
 
@@ -214,7 +215,7 @@ export default function Pesquisa() {
                 setQ(e.target.value);
                 resetPagination();
               }}
-              placeholder="Pesquisar contrato, agricultor, CPF/CNPJ ou modelo..."
+              placeholder="Pesquisar contrato, agricultor, CPF/CNPJ, observação ou modelo..."
               className="pl-9"
             />
           </div>
