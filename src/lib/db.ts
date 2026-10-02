@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isExpedicaoContrato } from "./tpFaturamento";
 import type { Cooperativa, Armazem, Produto, ModeloNota, TipoContrato, Grl019Report, Grl019Row } from "./types";
+import type { Rft006ConfigRecord } from "./rft006Config";
+import { buildRft006ConfigPayload, type Rft006ConfigValues } from "./rft006Config";
 
 type TableName = "cooperativas" | "armazens" | "produtos" | "modelos_nota" | "tipos_contrato";
 
@@ -195,6 +197,39 @@ export const useDeleteCooperativa = () => useRemove("cooperativas");
 export const useArmazens = (enabled = true) => useList<Armazem>("armazens", "razao_social", enabled);
 export const useSaveArmazem = () => useUpsert<Armazem>("armazens");
 export const useDeleteArmazem = () => useRemove("armazens");
+
+export const RFT006_CONFIG_QUERY_KEY = ["configuracao_rft006"] as const;
+
+export const useRft006Config = () =>
+  useQuery({
+    queryKey: RFT006_CONFIG_QUERY_KEY,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("configuracao_rft006").select("*").maybeSingle();
+      if (error) throw error;
+      return data as Rft006ConfigRecord | null;
+    },
+  });
+
+export const useSaveRft006Config = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (values: Rft006ConfigValues) => {
+      const { data, error } = await supabase
+        .from("configuracao_rft006")
+        .upsert(buildRft006ConfigPayload(values), { onConflict: "singleton" })
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as Rft006ConfigRecord;
+    },
+    onSuccess: (data) => {
+      qc.setQueryData(RFT006_CONFIG_QUERY_KEY, data);
+      void qc.invalidateQueries({ queryKey: RFT006_CONFIG_QUERY_KEY });
+      toast.success("Configuração padrão salva.");
+    },
+    onError: (e: Error) => toast.error("Erro ao salvar configuração padrão: " + e.message),
+  });
+};
 
 export const useProdutos = () => useList<Produto>("produtos", "descricao");
 export const useSaveProduto = () => useUpsert<Produto>("produtos");
