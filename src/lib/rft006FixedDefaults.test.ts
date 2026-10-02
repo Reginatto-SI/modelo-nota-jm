@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildRft006Nota } from "./rft006Nota";
-import { RFT006_FIXED_DEFAULTS } from "./rft006FixedDefaults";
+import { buildRft006Nota, generateFixedRft006Pdf } from "./rft006Nota";
+import { getRft006FixedGenerationConfig, RFT006_FIXED_DEFAULTS } from "./rft006FixedDefaults";
 import type { Rft006NotaGroup } from "./rft006";
 
 const group = (nota: string): Rft006NotaGroup => ({
@@ -31,16 +31,45 @@ describe("defaults operacionais temporários do RFT006", () => {
   });
 
   it.each(["418", "394", "403"])("renderiza somente a referência atual %s", (referencia) => {
-    const nota = buildRft006Nota(group(referencia), {
-      destinatario: { ...RFT006_FIXED_DEFAULTS.destinatario },
+    const nota = buildRft006Nota(group(referencia), getRft006FixedGenerationConfig());
+
+    expect(nota.notaReferencia).toBe(referencia);
+    expect(nota.dadosAdicionais).toContain(`REF NOTA ${referencia}`);
+    expect(nota.dadosAdicionais).not.toContain("{{nota_referencia}}");
+    if (referencia !== "418") expect(nota.dadosAdicionais).not.toContain("REF NOTA 418");
+  });
+
+  it("clona o destinatário sem permitir mutação dos defaults", () => {
+    const first = getRft006FixedGenerationConfig();
+    const second = getRft006FixedGenerationConfig();
+
+    expect(first).toMatchObject({
       cfop: RFT006_FIXED_DEFAULTS.cfop,
       cst: RFT006_FIXED_DEFAULTS.cst,
       naturezaOperacao: RFT006_FIXED_DEFAULTS.naturezaOperacao,
       dadosAdicionais: RFT006_FIXED_DEFAULTS.dadosAdicionaisTemplate,
     });
+    expect(first.destinatario).not.toBe(RFT006_FIXED_DEFAULTS.destinatario);
+    expect(first.destinatario).not.toBe(second.destinatario);
+    first.destinatario.nome = "Alterado";
+    expect(RFT006_FIXED_DEFAULTS.destinatario.nome).toContain("BIOAGRO");
+  });
 
-    expect(nota.dadosAdicionais).toContain(`REF NOTA ${referencia}`);
-    expect(nota.dadosAdicionais).not.toContain("{{nota_referencia}}");
-    if (referencia !== "418") expect(nota.dadosAdicionais).not.toContain("REF NOTA 418");
+  it("passa a geração direta válida uma única vez pela validação e mantém o nome homologado", () => {
+    const calls: unknown[][] = [];
+    const error = generateFixedRft006Pdf(group("418"), (...args) => calls.push(args));
+
+    expect(error).toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toBe("Modelo RFT006 - Nota 418 - Agricultor.pdf");
+    expect(calls[0][0]).toMatchObject([{ notaReferencia: "418", cfop: "5949", cst: "41", dadosAdicionais: expect.stringContaining("REF NOTA 418") }]);
+  });
+
+  it("não chama o renderer quando a Nota direta é inválida", () => {
+    const calls: unknown[][] = [];
+    const invalid = { ...group("418"), emitente: { ...group("418").emitente, razaoSocial: "" } };
+
+    expect(generateFixedRft006Pdf(invalid, (...args) => calls.push(args))).toBe("Informe razão social e CPF/CNPJ do emitente.");
+    expect(calls).toHaveLength(0);
   });
 });
