@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { FileUp } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, FileUp } from "lucide-react";
 import { toast } from "sonner";
 import { Layout } from "@/components/Layout";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import { generateNfeXmlBatch, processNfeXmlBatch, type NfeXmlBatchEntry } from "
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function XmlNfe() {
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [entries, setEntries] = useState<NfeXmlBatchEntry[]>([]);
   const [generating, setGenerating] = useState(false);
@@ -45,7 +47,7 @@ export default function XmlNfe() {
   };
 
   return <Layout><div className="space-y-6">
-    <div><h1 className="text-2xl font-bold tracking-tight">XML NF-e — Gerar PDFs</h1><p className="mt-1 text-muted-foreground">Importe uma ou várias NF-e emitidas pela VERDENA para gerar os modelos dos produtores.</p></div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold tracking-tight">Importar XMLs — Geração de modelos</h1><p className="mt-1 text-muted-foreground">Importe uma ou várias NF-e emitidas pela VERDENA para gerar os modelos dos produtores.</p></div><Button variant="outline" onClick={() => navigate("/rft006")}><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Button></div>
     <Card><CardHeader><CardTitle className="text-base">Importação</CardTitle></CardHeader><CardContent className="space-y-3">
       <Input ref={inputRef} type="file" accept=".xml,application/xml,text/xml" multiple onChange={(event) => void importFiles(event.target.files)} className="hidden" />
       <Button onClick={() => inputRef.current?.click()}><FileUp className="mr-2 h-4 w-4" />Selecionar XMLs</Button>
