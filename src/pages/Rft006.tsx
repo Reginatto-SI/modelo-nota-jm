@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Eye, FileSpreadsheet, HelpCircle, MoreHorizontal, Pencil, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Eye, FileCode2, FileSpreadsheet, HelpCircle, MoreHorizontal, Pencil, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Layout } from "@/components/Layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -155,8 +155,8 @@ export default function Rft006() {
       <div className="space-y-6">
         <div>
           {/* Título visual acompanha o rótulo compacto do menu; o relatório continua tecnicamente RFT006. */}
-          <h1 className="text-2xl font-bold">RFT 6 — Gerar modelo</h1>
-          <p className="text-sm text-muted-foreground">Importe o relatório, confira as Notas agrupadas e seus diagnósticos. Os dados ficam somente neste navegador.</p>
+          <h1 className="text-2xl font-bold">RFT 6 / XML — Geração de modelos</h1>
+          <p className="text-sm text-muted-foreground">Use o relatório RFT006 ou importe XMLs de NF-e da VERDENA para gerar os modelos. Os dados ficam somente neste navegador.</p>
         </div>
 
         <input ref={inputRef} type="file" accept=".xlsx,.xls" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.target.value = ""; }} />
@@ -167,6 +167,7 @@ export default function Rft006() {
             <div className="flex flex-wrap justify-center gap-2">
               <Button onClick={() => inputRef.current?.click()} disabled={busy || loading}>{report ? <RefreshCw className="mr-1 h-4 w-4" /> : <Upload className="mr-1 h-4 w-4" />}{busy ? "Lendo..." : report ? "Substituir relatório" : "Importar arquivo"}</Button>
               {report && <Button variant="outline" onClick={async () => { await clearRft006Report(); setReport(null); setDiagnostics(null); toast.success("RFT006 removido deste navegador."); }}><Trash2 className="mr-1 h-4 w-4" /> Limpar</Button>}
+              <Button variant="outline" onClick={() => navigate("/xml-nfe")}><FileCode2 className="mr-1 h-4 w-4" /> Importar XMLs</Button>
               {/* Tutorial contextual reutiliza o dialog padrão sem interferir no fluxo de importação. */}
               <Dialog>
                 <DialogTrigger asChild>
