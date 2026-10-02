@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Eye, FileSpreadsheet, RefreshCw, Save, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Eye, FileSpreadsheet, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Layout } from "@/components/Layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,9 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { clearRft006Report, loadRft006Report, saveRft006Report } from "@/lib/idb";
 import { parseRft006, type Rft006ImportDiagnostics, type Rft006NotaGroup, type Rft006Report } from "@/lib/rft006";
-import { RFT006_SITUACOES, summarizeRft006 } from "@/lib/rft006View";
+import { EMPTY_RFT006_FILTERS, filterRft006Notas, getRft006NotaLiquidTotal, RFT006_SITUACOES, summarizeRft006, type Rft006Filters } from "@/lib/rft006View";
 import { useArmazens, useRft006Config, useSaveRft006Config } from "@/lib/db";
 import type { NotaParty } from "@/lib/nota";
 import { buildRft006Nota } from "@/lib/rft006Nota";
@@ -46,6 +47,7 @@ export default function Rft006() {
   const [defaultLoaded, setDefaultLoaded] = useState(false);
   const [destinatarioNeedsReselection, setDestinatarioNeedsReselection] = useState(false);
   const [generationConfigReady, setGenerationConfigReady] = useState(false);
+  const [filters, setFilters] = useState<Rft006Filters>({ ...EMPTY_RFT006_FILTERS });
   const configInitialized = useRef(false);
   const { data: armazens = [], isLoading: loadingArmazens } = useArmazens(!!generating);
   const { data: config, isFetched: configFetched, isError: configError } = useRft006Config();
@@ -97,6 +99,10 @@ export default function Rft006() {
   };
 
   const summary = report ? summarizeRft006(report) : null;
+  // O memo opera somente sobre as Notas já agrupadas, sem reler as linhas do Excel.
+  const filteredNotas = useMemo(() => report ? filterRft006Notas(report.notas, filters) : [], [filters, report]);
+  const hasFilters = Object.entries(filters).some(([key, value]) => value !== EMPTY_RFT006_FILTERS[key as keyof Rft006Filters]);
+  const clearFilters = () => setFilters({ ...EMPTY_RFT006_FILTERS });
   const startGeneration = (nota: Rft006NotaGroup) => {
     // Padrão operacional temporário tem precedência sobre o padrão persistido, mas continua editável nesta geração.
     configInitialized.current = true;
@@ -150,9 +156,9 @@ export default function Rft006() {
             <Info label="Arquivo" value={report.fileName} /><Info label="Importado em" value={new Date(report.importedAt).toLocaleString("pt-BR")} /><Info label="Linhas" value={String(summary.linhas)} /><Info label="Notas" value={String(summary.notas)} /><Info label="Prontas" value={String(summary.prontas)} tone="success" /><Info label="Não elegíveis" value={String(summary.naoElegiveis)} tone="warning" /><Info label="Com inconsistência" value={String(summary.inconsistentes)} tone="error" /><Info label="Diagnósticos" value={String(summary.diagnosticos)} />
           </CardContent></Card>
 
-          <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Notas do relatório</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader><TableRow><TableHead>Nota</TableHead><TableHead>Razão Social do emitente</TableHead><TableHead>CPF/CNPJ</TableHead><TableHead>IE</TableHead><TableHead className="text-right">Itens</TableHead><TableHead className="text-right">Valor líquido</TableHead><TableHead>Situação</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>
-            {report.notas.map((nota) => <TableRow key={nota.nota}><TableCell className="font-semibold">{nota.nota}</TableCell><TableCell>{nota.emitente.razaoSocial || "—"}</TableCell><TableCell>{nota.emitente.cnpj || "—"}</TableCell><TableCell>{nota.emitente.ie || "—"}</TableCell><TableCell className="text-right">{nota.items.length}</TableCell><TableCell className="text-right">{currency.format(nota.items.reduce((total, item) => total + (item.valorLiquido ?? 0), 0))}</TableCell><TableCell><StatusBadge status={nota.situacao} /></TableCell><TableCell><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`Visualizar detalhes da Nota ${nota.nota}`} onClick={() => setDetails(nota)}><Eye className="h-4 w-4" /></Button>{nota.situacao === "pronto" && <Button size="sm" onClick={() => startGeneration(nota)}>Gerar modelo</Button>}</div></TableCell></TableRow>)}
-          </TableBody></Table></CardContent></Card>
+          <Card className="shadow-card"><CardHeader className="space-y-4"><CardTitle className="text-base">Notas do relatório</CardTitle><div className="space-y-3"><div className="grid gap-3 md:grid-cols-[minmax(260px,1.5fr)_minmax(190px,0.8fr)_minmax(150px,0.6fr)] md:items-end"><div className="space-y-1.5"><Label htmlFor="rft006-search">Pesquisar</Label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input id="rft006-search" className="pl-9" placeholder="Pesquisar nota, emitente, CPF/CNPJ ou IE" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} /></div></div><div className="space-y-1.5"><Label>Situação</Label><Select value={filters.situacao} onValueChange={(value) => setFilters((current) => ({ ...current, situacao: value as Rft006Filters["situacao"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todas">Todas</SelectItem>{Object.entries(RFT006_SITUACOES).map(([value, config]) => <SelectItem key={value} value={value}>{config.label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1.5"><Label>Itens</Label><Select value={filters.items} onValueChange={(value) => setFilters((current) => ({ ...current, items: value as Rft006Filters["items"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="um">1 item</SelectItem><SelectItem value="mais_de_um">Mais de 1 item</SelectItem></SelectContent></Select></div></div><div className="grid gap-3 sm:grid-cols-2 md:grid-cols-[minmax(180px,0.7fr)_minmax(180px,0.7fr)_auto_1fr] md:items-end"><FilterValueInput id="rft006-min" label="Valor líquido mínimo" value={filters.minValue} onChange={(minValue) => setFilters((current) => ({ ...current, minValue }))} /><FilterValueInput id="rft006-max" label="Valor líquido máximo" value={filters.maxValue} onChange={(maxValue) => setFilters((current) => ({ ...current, maxValue }))} /><Button variant="outline" onClick={clearFilters} disabled={!hasFilters}>Limpar filtros</Button><p className="pb-2 text-sm text-muted-foreground md:text-right">{hasFilters ? `${filteredNotas.length} de ${report.notas.length} Notas exibidas` : `${report.notas.length} Notas exibidas`}</p></div></div></CardHeader><CardContent className="p-0">{filteredNotas.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nota</TableHead><TableHead>Razão Social do emitente</TableHead><TableHead>CPF/CNPJ</TableHead><TableHead>IE</TableHead><TableHead className="text-right">Itens</TableHead><TableHead className="text-right">Valor líquido</TableHead><TableHead>Situação</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>
+            {filteredNotas.map((nota) => <TableRow key={nota.nota}><TableCell className="font-semibold">{nota.nota}</TableCell><TableCell>{nota.emitente.razaoSocial || "—"}</TableCell><TableCell>{nota.emitente.cnpj || "—"}</TableCell><TableCell>{nota.emitente.ie || "—"}</TableCell><TableCell className="text-right">{nota.items.length}</TableCell><TableCell className="text-right">{currency.format(getRft006NotaLiquidTotal(nota))}</TableCell><TableCell><StatusBadge status={nota.situacao} /></TableCell><TableCell><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`Visualizar detalhes da Nota ${nota.nota}`} onClick={() => setDetails(nota)}><Eye className="h-4 w-4" /></Button>{nota.situacao === "pronto" && <Button size="sm" onClick={() => startGeneration(nota)}>Gerar modelo</Button>}</div></TableCell></TableRow>)}
+          </TableBody></Table></div> : <div className="flex flex-col items-center gap-3 px-4 py-10 text-center"><p className="text-sm text-muted-foreground">Nenhuma Nota encontrada com os filtros informados.</p><Button variant="outline" size="sm" onClick={clearFilters}>Limpar filtros</Button></div>}</CardContent></Card>
         </>}
       </div>
 
@@ -190,6 +196,10 @@ function GenerationDialog(props: { nota: Rft006NotaGroup | null; armazens: impor
 
 function Field({ label, value, onChange, disabled = false }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
   return <div className="space-y-1.5"><Label>{label}</Label><Input disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+}
+
+function FilterValueInput({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
+  return <div className="space-y-1.5"><Label htmlFor={id}>{label}</Label><Input id={id} inputMode="decimal" placeholder="0,00" value={value} onChange={(event) => onChange(event.target.value)} /></div>;
 }
 
 function StatusBadge({ status }: { status: Rft006NotaGroup["situacao"] }) {
