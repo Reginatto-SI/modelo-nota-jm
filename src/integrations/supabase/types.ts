@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      configuracao_rft006: {
+        Row: {
+          cfop: string
+          created_at: string
+          cst: string
+          dados_adicionais_template: string | null
+          destinatario_id: string | null
+          natureza_operacao: string
+          singleton: boolean
+          updated_at: string
+        }
+        Insert: {
+          cfop: string
+          created_at?: string
+          cst: string
+          dados_adicionais_template?: string | null
+          destinatario_id?: string | null
+          natureza_operacao: string
+          singleton?: boolean
+          updated_at?: string
+        }
+        Update: {
+          cfop?: string
+          created_at?: string
+          cst?: string
+          dados_adicionais_template?: string | null
+          destinatario_id?: string | null
+          natureza_operacao?: string
+          singleton?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configuracao_rft006_destinatario_id_fkey"
+            columns: ["destinatario_id"]
+            isOneToOne: false
+            referencedRelation: "armazens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       armazens: {
         Row: {
           ativo: boolean

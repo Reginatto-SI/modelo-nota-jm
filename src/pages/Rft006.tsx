@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Eye, FileSpreadsheet, RefreshCw, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Eye, FileSpreadsheet, RefreshCw, Save, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Layout } from "@/components/Layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,9 +16,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { clearRft006Report, loadRft006Report, saveRft006Report } from "@/lib/idb";
 import { parseRft006, type Rft006ImportDiagnostics, type Rft006NotaGroup, type Rft006Report } from "@/lib/rft006";
 import { RFT006_SITUACOES, summarizeRft006 } from "@/lib/rft006View";
-import { useArmazens } from "@/lib/db";
+import { useArmazens, useRft006Config, useSaveRft006Config } from "@/lib/db";
 import type { NotaParty } from "@/lib/nota";
 import { buildRft006Nota } from "@/lib/rft006Nota";
+import { armazemToNotaParty, initializeRft006Config } from "@/lib/rft006Config";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 6 });
@@ -33,18 +34,44 @@ export default function Rft006() {
   const [diagnostics, setDiagnostics] = useState<Rft006ImportDiagnostics | null>(null);
   const [details, setDetails] = useState<Rft006NotaGroup | null>(null);
   const [generating, setGenerating] = useState<Rft006NotaGroup | null>(null);
+  const [destinatarioId, setDestinatarioId] = useState<string | null>(null);
   const [destinatario, setDestinatario] = useState<NotaParty | null>(null);
   const [cfop, setCfop] = useState("");
   const [natureza, setNatureza] = useState("");
   const [cst, setCst] = useState("");
   const [dadosAdicionais, setDadosAdicionais] = useState("");
   const [destinatarioBusca, setDestinatarioBusca] = useState("");
+  const [defaultLoaded, setDefaultLoaded] = useState(false);
+  const [destinatarioNeedsReselection, setDestinatarioNeedsReselection] = useState(false);
+  const [generationConfigReady, setGenerationConfigReady] = useState(false);
+  const configInitialized = useRef(false);
   const { data: armazens = [], isLoading: loadingArmazens } = useArmazens(!!generating);
+  const { data: config, isFetched: configFetched, isError: configError } = useRft006Config();
+  const saveConfig = useSaveRft006Config();
 
   useEffect(() => {
     // O RFT006 e carregado somente da store local propria; nenhum cadastro/backend participa deste fluxo.
     loadRft006Report().then((saved) => setReport(saved ?? null)).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!generating || configInitialized.current || (!configFetched && !configError) || loadingArmazens) return;
+    configInitialized.current = true;
+
+    // O ref impede reaplicação por refetch/cache depois que os controles forem liberados.
+    const loadedConfig = configError ? null : config;
+    const applied = initializeRft006Config(loadedConfig, armazens);
+    setDestinatarioId(applied.destinatarioId);
+    setDestinatario(applied.destinatario);
+    setCfop(applied.cfop);
+    setNatureza(applied.naturezaOperacao);
+    setCst(applied.cst);
+    setDadosAdicionais(applied.dadosAdicionaisTemplate);
+    setDefaultLoaded(Boolean(loadedConfig));
+    setDestinatarioNeedsReselection(applied.destinatarioNeedsReselection);
+    setGenerationConfigReady(true);
+    if (configError) toast.warning("Não foi possível carregar a configuração padrão. Preencha os dados manualmente.");
+  }, [armazens, config, configError, configFetched, generating, loadingArmazens]);
 
   const persist = async (next: Rft006Report) => {
     await saveRft006Report(next);
@@ -68,14 +95,27 @@ export default function Rft006() {
 
   const summary = report ? summarizeRft006(report) : null;
   const startGeneration = (nota: Rft006NotaGroup) => {
-    // A configuração é efêmera: cada Nota começa sem herdar valores da geração anterior.
+    // Reinicia o estado local; o padrão persistido será aplicado uma única vez pelo efeito acima.
+    configInitialized.current = false;
+    setGenerationConfigReady(false);
     setGenerating(nota);
+    setDestinatarioId(null);
     setDestinatario(null);
     setDestinatarioBusca("");
     setCfop("");
     setNatureza("");
     setCst("");
     setDadosAdicionais("");
+    setDefaultLoaded(false);
+    setDestinatarioNeedsReselection(false);
+  };
+
+  const validateGenerationFields = () => {
+    if (!destinatarioId || !destinatario || !cfop.trim() || !natureza.trim() || !cst.trim()) {
+      toast.error("Preencha destinatário, CFOP, natureza da operação e CST.");
+      return false;
+    }
+    return true;
   };
 
   return (
@@ -114,11 +154,16 @@ export default function Rft006() {
       <AlertDialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Substituir RFT006 importado?</AlertDialogTitle><AlertDialogDescription>Já existe um relatório RFT006 salvo neste navegador. A substituição removerá somente esse relatório e não altera o GRL019.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { if (pending) void persist(pending); setPending(null); }}>Substituir relatório</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <NotaDetails nota={details} onOpenChange={(open) => !open && setDetails(null)} />
       <GenerationDialog
-        nota={generating} armazens={armazens} loading={loadingArmazens} busca={destinatarioBusca} onBusca={setDestinatarioBusca}
-        destinatario={destinatario} onDestinatario={setDestinatario} cfop={cfop} onCfop={setCfop} natureza={natureza} onNatureza={setNatureza}
+        nota={generating} armazens={armazens} loading={loadingArmazens} configReady={generationConfigReady} busca={destinatarioBusca} onBusca={setDestinatarioBusca}
+        destinatarioId={destinatarioId} destinatario={destinatario} onDestinatario={(id, party) => { setDestinatarioId(id); setDestinatario(party); setDestinatarioNeedsReselection(false); }} cfop={cfop} onCfop={setCfop} natureza={natureza} onNatureza={setNatureza}
         cst={cst} onCst={setCst} dadosAdicionais={dadosAdicionais} onDadosAdicionais={setDadosAdicionais}
+        defaultLoaded={defaultLoaded} destinatarioNeedsReselection={destinatarioNeedsReselection} savingDefault={saveConfig.isPending}
+        onSaveDefault={() => {
+          if (!validateGenerationFields()) return;
+          saveConfig.mutate({ destinatarioId, cfop, naturezaOperacao: natureza, cst, dadosAdicionaisTemplate: dadosAdicionais });
+        }}
         onClose={() => setGenerating(null)} onGenerate={() => {
-          if (!generating || !destinatario || !cfop.trim() || !natureza.trim() || !cst.trim()) return toast.error("Preencha destinatário, CFOP, natureza da operação e CST.");
+          if (!generating || !validateGenerationFields()) return;
           const nota = buildRft006Nota(generating, { destinatario, cfop, naturezaOperacao: natureza, cst, dadosAdicionais });
           navigate("/preview", { state: { notas: [nota], warnings: [] } });
         }}
@@ -127,17 +172,16 @@ export default function Rft006() {
   );
 }
 
-function GenerationDialog(props: { nota: Rft006NotaGroup | null; armazens: import("@/lib/types").Armazem[]; loading: boolean; busca: string; onBusca: (v: string) => void; destinatario: NotaParty | null; onDestinatario: (v: NotaParty) => void; cfop: string; onCfop: (v: string) => void; natureza: string; onNatureza: (v: string) => void; cst: string; onCst: (v: string) => void; dadosAdicionais: string; onDadosAdicionais: (v: string) => void; onClose: () => void; onGenerate: () => void }) {
+function GenerationDialog(props: { nota: Rft006NotaGroup | null; armazens: import("@/lib/types").Armazem[]; loading: boolean; configReady: boolean; busca: string; onBusca: (v: string) => void; destinatarioId: string | null; destinatario: NotaParty | null; onDestinatario: (id: string, v: NotaParty) => void; cfop: string; onCfop: (v: string) => void; natureza: string; onNatureza: (v: string) => void; cst: string; onCst: (v: string) => void; dadosAdicionais: string; onDadosAdicionais: (v: string) => void; defaultLoaded: boolean; destinatarioNeedsReselection: boolean; savingDefault: boolean; onSaveDefault: () => void; onClose: () => void; onGenerate: () => void }) {
   const filtered = useMemo(() => {
     const q = props.busca.toLocaleLowerCase("pt-BR").trim();
     return props.armazens.filter((item) => item.ativo !== false && (!q || [item.razao_social, item.cnpj_cpf, item.municipio].some((value) => value?.toLocaleLowerCase("pt-BR").includes(q))));
   }, [props.armazens, props.busca]);
-  const party = (item: import("@/lib/types").Armazem): NotaParty => ({ nome: item.razao_social, cpfCnpj: item.cnpj_cpf ?? "", ie: item.inscricao_estadual ?? "", endereco: item.endereco ?? "", bairro: item.bairro ?? "", cep: item.cep ?? "", municipio: item.municipio ?? "", uf: item.uf ?? "" });
-  return <Dialog open={!!props.nota} onOpenChange={(open) => !open && props.onClose()}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Configurar modelo da Nota {props.nota?.nota}</DialogTitle><DialogDescription>Os dados valem somente para esta geração e poderão ser revisados na prévia.</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>Destinatário</Label><Input placeholder="Pesquisar nome, CPF/CNPJ ou município" value={props.busca} onChange={(e) => props.onBusca(e.target.value)} /><div className="max-h-40 overflow-auto rounded-md border">{props.loading ? <p className="p-3 text-sm text-muted-foreground">Carregando...</p> : filtered.map((item) => <button type="button" key={item.id} onClick={() => props.onDestinatario(party(item))} className={`block w-full border-b p-2 text-left text-sm last:border-0 hover:bg-muted ${props.destinatario?.cpfCnpj === item.cnpj_cpf ? "bg-muted" : ""}`}><span className="font-medium">{item.razao_social}</span><span className="ml-2 text-muted-foreground">{item.cnpj_cpf || "sem CPF/CNPJ"}</span></button>)}</div>{props.destinatario && <p className="text-sm text-primary">Selecionado: {props.destinatario.nome}</p>}</div><div className="grid gap-3 sm:grid-cols-3"><Field label="CFOP do novo modelo" value={props.cfop} onChange={props.onCfop} /><Field label="Natureza da operação" value={props.natureza} onChange={props.onNatureza} /><Field label="CST" value={props.cst} onChange={props.onCst} /></div><div className="space-y-1.5"><Label>Dados adicionais</Label><Textarea rows={5} value={props.dadosAdicionais} onChange={(e) => props.onDadosAdicionais(e.target.value)} /></div></div><DialogFooter><Button variant="outline" onClick={props.onClose}>Cancelar</Button><Button onClick={props.onGenerate}>Abrir prévia</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open={!!props.nota} onOpenChange={(open) => !open && props.onClose()}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Configurar modelo da Nota {props.nota?.nota}</DialogTitle><DialogDescription>Alterações feitas aqui valem somente para esta geração, salvo se você clicar em “Salvar como padrão”.</DialogDescription></DialogHeader><div className="space-y-4">{!props.configReady && <p className="text-sm text-muted-foreground">Carregando configuração padrão...</p>}{props.defaultLoaded && <p className="text-xs text-muted-foreground">Configuração padrão carregada</p>}<div className="space-y-2"><Label>Destinatário</Label><Input disabled={!props.configReady} placeholder="Pesquisar nome, CPF/CNPJ ou município" value={props.busca} onChange={(e) => props.onBusca(e.target.value)} /><div className="max-h-40 overflow-auto rounded-md border">{props.loading ? <p className="p-3 text-sm text-muted-foreground">Carregando...</p> : filtered.map((item) => <button type="button" disabled={!props.configReady} key={item.id} onClick={() => props.onDestinatario(item.id, armazemToNotaParty(item))} className={`block w-full border-b p-2 text-left text-sm last:border-0 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 ${props.destinatarioId === item.id ? "bg-muted" : ""}`}><span className="font-medium">{item.razao_social}</span><span className="ml-2 text-muted-foreground">{item.cnpj_cpf || "sem CPF/CNPJ"}</span></button>)}</div>{props.destinatario && <p className="text-sm text-primary">Selecionado: {props.destinatario.nome}</p>}{props.destinatarioNeedsReselection && <p className="text-sm text-warning">O destinatário padrão não está disponível ou está inativo. Selecione-o novamente.</p>}</div><div className="grid gap-3 sm:grid-cols-3"><Field disabled={!props.configReady} label="CFOP do novo modelo" value={props.cfop} onChange={props.onCfop} /><Field disabled={!props.configReady} label="Natureza da operação" value={props.natureza} onChange={props.onNatureza} /><Field disabled={!props.configReady} label="CST" value={props.cst} onChange={props.onCst} /></div><div className="space-y-1.5"><Label>Dados adicionais</Label><Textarea disabled={!props.configReady} rows={5} value={props.dadosAdicionais} onChange={(e) => props.onDadosAdicionais(e.target.value)} /></div></div><DialogFooter className="gap-2 sm:justify-between"><Button variant="outline" onClick={props.onClose}>Cancelar</Button><div className="flex flex-col-reverse gap-2 sm:flex-row"><Button variant="secondary" onClick={props.onSaveDefault} disabled={!props.configReady || props.savingDefault}><Save className="mr-1 h-4 w-4" />{props.savingDefault ? "Salvando..." : "Salvar como padrão"}</Button><Button onClick={props.onGenerate} disabled={!props.configReady}>Abrir prévia</Button></div></DialogFooter></DialogContent></Dialog>;
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <div className="space-y-1.5"><Label>{label}</Label><Input value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+function Field({ label, value, onChange, disabled = false }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
+  return <div className="space-y-1.5"><Label>{label}</Label><Input disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} /></div>;
 }
 
 function StatusBadge({ status }: { status: Rft006NotaGroup["situacao"] }) {
