@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Eye, FileSpreadsheet, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Eye, FileSpreadsheet, HelpCircle, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Layout } from "@/components/Layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { clearRft006Report, loadRft006Report, saveRft006Report } from "@/lib/idb";
@@ -145,6 +145,24 @@ export default function Rft006() {
             <div className="flex flex-wrap justify-center gap-2">
               <Button onClick={() => inputRef.current?.click()} disabled={busy || loading}>{report ? <RefreshCw className="mr-1 h-4 w-4" /> : <Upload className="mr-1 h-4 w-4" />}{busy ? "Lendo..." : report ? "Substituir relatório" : "Importar arquivo"}</Button>
               {report && <Button variant="outline" onClick={async () => { await clearRft006Report(); setReport(null); setDiagnostics(null); toast.success("RFT006 removido deste navegador."); }}><Trash2 className="mr-1 h-4 w-4" /> Limpar</Button>}
+              {/* Tutorial contextual reutiliza o dialog padrão sem interferir no fluxo de importação. */}
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline"><HelpCircle className="mr-1 h-4 w-4" /> Tutorial</Button>
+                </DialogTrigger>
+                <DialogContent className="max-h-[90vh] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-5xl">
+                  <DialogHeader>
+                    <DialogTitle>Tutorial do relatório RFT006</DialogTitle>
+                    <DialogDescription>Confira os filtros que devem ser aplicados no sistema antes de exportar o relatório.</DialogDescription>
+                  </DialogHeader>
+                  <div className="flex justify-center overflow-auto rounded-md border bg-muted/30 p-2">
+                    <img src="/RFT006 - Filtros_Tutorial.png" alt="Filtros para exportar o relatório RFT006" className="h-auto max-w-full rounded object-contain" />
+                  </div>
+                  <DialogFooter>
+                    <DialogClose asChild><Button type="button">Fechar</Button></DialogClose>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </CardContent>
         </Card>
