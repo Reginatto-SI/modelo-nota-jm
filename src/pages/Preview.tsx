@@ -11,21 +11,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Copy, Download, Search } from "lucide-react";
-import type { Nota } from "@/lib/nota";
+import type { Nota, NotaRft006Item } from "@/lib/nota";
 import type { Armazem, Cooperativa } from "@/lib/types";
 import { buildNotaPdfFileName, createManualCloneFromPreview, syncPlacaCavaloPlaceholder, type NotaParty } from "@/lib/nota";
 import { generatePdf } from "@/lib/pdf";
-import { TIPO_FRETE_OPTIONS, normalizeTipoFrete } from "@/lib/tipoFrete";
+import { TIPO_FRETE_OPTIONS, normalizePreviewTipoFrete, normalizeTipoFrete } from "@/lib/tipoFrete";
 import { toast } from "sonner";
 import { useArmazens, useCooperativas } from "@/lib/db";
 import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "@/lib/numberFormat";
+import { canGeneratePdf, getPreviewReturnPath, updateRft006Nota } from "@/lib/rft006Nota";
 
 export default function Preview() {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as { notas: Nota[]; warnings: string[] } | null;
   const [notas, setNotas] = useState<Nota[]>(() =>
-    (state?.notas ?? []).map((nota) => ({ ...nota, tpFrete: normalizeTipoFrete(nota.tpFrete) })),
+    (state?.notas ?? []).map((nota) => ({ ...nota, tpFrete: normalizePreviewTipoFrete(nota.sourceType, nota.tpFrete) })),
   );
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [cadastroSearchIdx, setCadastroSearchIdx] = useState<number | null>(null);
@@ -37,6 +38,7 @@ export default function Preview() {
 
   const isManualNota = (nota: Nota) => nota.isManualClone || nota.sourceType === "manual_clone";
   const isManualClone = notas.some(isManualNota);
+  const isRft006 = notas.some((nota) => nota.sourceType === "rft006");
 
   const update = (idx: number, patch: Partial<Nota>, recalc: "unitario" | "total" | "none" = "none") => {
     setNotas((prev) => prev.map((n, i) => {
@@ -100,6 +102,7 @@ export default function Preview() {
   };
 
   const gerarPdfConfirmado = () => {
+    if (notas.some((nota) => !canGeneratePdf(nota))) return toast.info("O PDF RFT006 será habilitado após a validação da prévia multi-item.");
     const primeiraNotaComPlaceholder = notas.find((n) => isManualNota(n) && hasPendingPlaceholders(n));
     if (primeiraNotaComPlaceholder) {
       toast.warning("Há placeholders pendentes nos dados adicionais. Revise antes de usar o PDF orientativo.");
@@ -149,13 +152,13 @@ export default function Preview() {
             <p className="text-sm text-muted-foreground">Edite os campos antes de gerar o PDF orientativo.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate("/pesquisa")}>Voltar</Button>
-            {!isManualClone && (
+            <Button variant="outline" onClick={() => navigate(getPreviewReturnPath(notas))}>Voltar</Button>
+            {!isManualClone && !isRft006 && (
               <Button variant="secondary" onClick={duplicarComoAvulso}>
                 <Copy className="mr-1 h-4 w-4" /> Duplicar como avulso
               </Button>
             )}
-            <Button onClick={gerarPdfConfirmado}><Download className="mr-1 h-4 w-4" /> Gerar PDF</Button>
+            <Button onClick={gerarPdfConfirmado} disabled={isRft006} title={isRft006 ? "Disponível após a validação da prévia multi-item" : undefined}><Download className="mr-1 h-4 w-4" /> {isRft006 ? "PDF em breve" : "Gerar PDF"}</Button>
           </div>
         </div>
 
@@ -164,6 +167,7 @@ export default function Preview() {
             Modo avulso/manual: revise os dados antes de gerar o PDF. O sistema usará as informações digitadas nesta tela.
           </div>
         )}
+        {isRft006 && <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Prévia RFT006 multi-item. As alterações ficam somente nesta geração; o PDF ainda não está disponível.</div>}
 
         <Tabs defaultValue="0">
           <TabsList>
@@ -171,7 +175,9 @@ export default function Preview() {
               <TabsTrigger key={i} value={String(i)}>Modelo CFOP {n.cfop}</TabsTrigger>
             ))}
           </TabsList>
-          {notas.map((n, i) => (
+          {notas.map((n, i) => n.sourceType === "rft006" ? (
+            <Rft006Preview key={i} nota={n} onChange={(patch, manualDadosAdicionais) => update(i, updateRft006Nota(n, patch, manualDadosAdicionais), "none")} />
+          ) : (
             <TabsContent key={i} value={String(i)} className="space-y-4">
               <Card className="shadow-card">
                 <CardHeader><CardTitle className="text-base">{n.nomeModelo} — {n.naturezaOperacao}</CardTitle></CardHeader>
@@ -301,6 +307,27 @@ export default function Preview() {
       />
     </Layout>
   );
+}
+
+function Rft006Preview({ nota, onChange }: { nota: Nota; onChange: (patch: Partial<Nota>, manualDadosAdicionais?: boolean) => void }) {
+  const itens = nota.itens ?? [];
+  const updateItem = (index: number, field: keyof NotaRft006Item, value: string) => {
+    // No RFT006 cada valor financeiro é deliberadamente independente; não há recálculo fiscal implícito.
+    const numeric = ["quantidade", "valorUnitario", "valorBruto", "desconto", "valorLiquido"].includes(field);
+    const next = itens.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: numeric ? Number(value) : value } : item);
+    onChange({ itens: next });
+  };
+  const partyField = (target: "emitente" | "destinatario", field: keyof NotaParty, value: string) => onChange({ [target]: { ...nota[target], [field]: value } });
+  return <TabsContent value="0" className="space-y-4">
+    <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Referência e dados fiscais</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><F label="Nota de referência" value={nota.notaReferencia ?? ""} onChange={(value) => onChange({ notaReferencia: value })} /><F label="CFOP" value={nota.cfop} onChange={(value) => onChange({ cfop: value })} /><F label="CST" value={nota.cst ?? ""} onChange={(value) => onChange({ cst: value, produto: { ...nota.produto, cst: value } })} /><F label="Natureza da operação" value={nota.naturezaOperacao} onChange={(value) => onChange({ naturezaOperacao: value })} /></CardContent></Card>
+    <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Emitente / Destinatário</CardTitle></CardHeader><CardContent className="grid gap-4 lg:grid-cols-2"><div className="rounded-md border p-3"><h3 className="mb-3 font-semibold text-primary">Emitente</h3><div className="grid gap-3 sm:grid-cols-2"><F label="Razão social" value={nota.emitente.nome} onChange={(v) => partyField("emitente", "nome", v)} /><F label="CPF/CNPJ" value={nota.emitente.cpfCnpj} onChange={(v) => partyField("emitente", "cpfCnpj", v)} /><F label="IE (opcional)" value={nota.emitente.ie} onChange={(v) => partyField("emitente", "ie", v)} /></div></div><PartyFields title="Destinatário" party={nota.destinatario} onChange={(destinatario) => onChange({ destinatario })} /></CardContent></Card>
+    <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Itens ({itens.length})</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table className="min-w-[1100px]"><TableHeader><TableRow><TableHead>Descrição</TableHead><TableHead>NCM</TableHead><TableHead>Un.</TableHead><TableHead>Quantidade</TableHead><TableHead>Valor unitário</TableHead><TableHead>Valor bruto</TableHead><TableHead>Desconto</TableHead><TableHead>Valor líquido</TableHead></TableRow></TableHeader><TableBody>{itens.map((item, index) => <TableRow key={index}><EditCell value={item.descricao} onChange={(v) => updateItem(index, "descricao", v)} /><EditCell value={item.ncm} onChange={(v) => updateItem(index, "ncm", v)} /><EditCell value={item.unidade} onChange={(v) => updateItem(index, "unidade", v)} /><EditCell type="number" value={String(item.quantidade)} onChange={(v) => updateItem(index, "quantidade", v)} /><EditCell type="number" value={String(item.valorUnitario)} onChange={(v) => updateItem(index, "valorUnitario", v)} /><EditCell type="number" value={String(item.valorBruto)} onChange={(v) => updateItem(index, "valorBruto", v)} /><EditCell type="number" value={String(item.desconto)} onChange={(v) => updateItem(index, "desconto", v)} /><EditCell type="number" value={String(item.valorLiquido)} onChange={(v) => updateItem(index, "valorLiquido", v)} /></TableRow>)}</TableBody></Table><div className="flex justify-end gap-5 border-t p-3 text-sm"><span>Bruto: <strong>{formatCurrencyBR(nota.valorTotal)}</strong></span><span>Desconto: <strong>{formatCurrencyBR(nota.valorDesconto ?? 0)}</strong></span><span>Líquido: <strong>{formatCurrencyBR(nota.valorLiquido ?? 0)}</strong></span></div></CardContent></Card>
+    <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Dados adicionais</CardTitle></CardHeader><CardContent><Textarea rows={6} value={nota.dadosAdicionais} onChange={(event) => onChange({ dadosAdicionais: event.target.value }, true)} /></CardContent></Card>
+  </TabsContent>;
+}
+
+function EditCell({ value, onChange, type = "text" }: { value: string; onChange: (value: string) => void; type?: string }) {
+  return <TableCell className="p-2"><Input className="min-w-24" type={type} step={type === "number" ? "any" : undefined} value={value} onChange={(event) => onChange(event.target.value)} /></TableCell>;
 }
 
 function PartyFields({ title, party, action, onChange }: { title: string; party: NotaParty; action?: ReactNode; onChange: (party: NotaParty) => void }) {

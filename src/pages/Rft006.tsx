@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Eye, FileSpreadsheet, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Layout } from "@/components/Layout";
@@ -6,17 +7,24 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { clearRft006Report, loadRft006Report, saveRft006Report } from "@/lib/idb";
 import { parseRft006, type Rft006ImportDiagnostics, type Rft006NotaGroup, type Rft006Report } from "@/lib/rft006";
 import { RFT006_SITUACOES, summarizeRft006 } from "@/lib/rft006View";
+import { useArmazens } from "@/lib/db";
+import type { NotaParty } from "@/lib/nota";
+import { buildRft006Nota } from "@/lib/rft006Nota";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 6 });
 
 export default function Rft006() {
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [report, setReport] = useState<Rft006Report | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,6 +32,14 @@ export default function Rft006() {
   const [pending, setPending] = useState<Rft006Report | null>(null);
   const [diagnostics, setDiagnostics] = useState<Rft006ImportDiagnostics | null>(null);
   const [details, setDetails] = useState<Rft006NotaGroup | null>(null);
+  const [generating, setGenerating] = useState<Rft006NotaGroup | null>(null);
+  const [destinatario, setDestinatario] = useState<NotaParty | null>(null);
+  const [cfop, setCfop] = useState("");
+  const [natureza, setNatureza] = useState("");
+  const [cst, setCst] = useState("");
+  const [dadosAdicionais, setDadosAdicionais] = useState("");
+  const [destinatarioBusca, setDestinatarioBusca] = useState("");
+  const { data: armazens = [], isLoading: loadingArmazens } = useArmazens(!!generating);
 
   useEffect(() => {
     // O RFT006 e carregado somente da store local propria; nenhum cadastro/backend participa deste fluxo.
@@ -51,6 +67,16 @@ export default function Rft006() {
   };
 
   const summary = report ? summarizeRft006(report) : null;
+  const startGeneration = (nota: Rft006NotaGroup) => {
+    // A configuração é efêmera: cada Nota começa sem herdar valores da geração anterior.
+    setGenerating(nota);
+    setDestinatario(null);
+    setDestinatarioBusca("");
+    setCfop("");
+    setNatureza("");
+    setCst("");
+    setDadosAdicionais("");
+  };
 
   return (
     <Layout>
@@ -79,16 +105,39 @@ export default function Rft006() {
             <Info label="Arquivo" value={report.fileName} /><Info label="Importado em" value={new Date(report.importedAt).toLocaleString("pt-BR")} /><Info label="Linhas" value={String(summary.linhas)} /><Info label="Notas" value={String(summary.notas)} /><Info label="Prontas" value={String(summary.prontas)} tone="success" /><Info label="Não elegíveis" value={String(summary.naoElegiveis)} tone="warning" /><Info label="Com inconsistência" value={String(summary.inconsistentes)} tone="error" /><Info label="Diagnósticos" value={String(summary.diagnosticos)} />
           </CardContent></Card>
 
-          <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Notas do relatório</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader><TableRow><TableHead>Nota</TableHead><TableHead>Razão Social do emitente</TableHead><TableHead>CPF/CNPJ</TableHead><TableHead>IE</TableHead><TableHead className="text-right">Itens</TableHead><TableHead className="text-right">Valor líquido</TableHead><TableHead>Situação</TableHead><TableHead className="w-16 text-center">Detalhes</TableHead></TableRow></TableHeader><TableBody>
-            {report.notas.map((nota) => <TableRow key={nota.nota}><TableCell className="font-semibold">{nota.nota}</TableCell><TableCell>{nota.emitente.razaoSocial || "—"}</TableCell><TableCell>{nota.emitente.cnpj || "—"}</TableCell><TableCell>{nota.emitente.ie || "—"}</TableCell><TableCell className="text-right">{nota.items.length}</TableCell><TableCell className="text-right">{currency.format(nota.items.reduce((total, item) => total + (item.valorLiquido ?? 0), 0))}</TableCell><TableCell><StatusBadge status={nota.situacao} /></TableCell><TableCell className="text-center"><Button size="icon" variant="ghost" aria-label={`Visualizar detalhes da Nota ${nota.nota}`} onClick={() => setDetails(nota)}><Eye className="h-4 w-4" /></Button></TableCell></TableRow>)}
+          <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Notas do relatório</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader><TableRow><TableHead>Nota</TableHead><TableHead>Razão Social do emitente</TableHead><TableHead>CPF/CNPJ</TableHead><TableHead>IE</TableHead><TableHead className="text-right">Itens</TableHead><TableHead className="text-right">Valor líquido</TableHead><TableHead>Situação</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>
+            {report.notas.map((nota) => <TableRow key={nota.nota}><TableCell className="font-semibold">{nota.nota}</TableCell><TableCell>{nota.emitente.razaoSocial || "—"}</TableCell><TableCell>{nota.emitente.cnpj || "—"}</TableCell><TableCell>{nota.emitente.ie || "—"}</TableCell><TableCell className="text-right">{nota.items.length}</TableCell><TableCell className="text-right">{currency.format(nota.items.reduce((total, item) => total + (item.valorLiquido ?? 0), 0))}</TableCell><TableCell><StatusBadge status={nota.situacao} /></TableCell><TableCell><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`Visualizar detalhes da Nota ${nota.nota}`} onClick={() => setDetails(nota)}><Eye className="h-4 w-4" /></Button>{nota.situacao === "pronto" && <Button size="sm" onClick={() => startGeneration(nota)}>Gerar modelo</Button>}</div></TableCell></TableRow>)}
           </TableBody></Table></CardContent></Card>
         </>}
       </div>
 
       <AlertDialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Substituir RFT006 importado?</AlertDialogTitle><AlertDialogDescription>Já existe um relatório RFT006 salvo neste navegador. A substituição removerá somente esse relatório e não altera o GRL019.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { if (pending) void persist(pending); setPending(null); }}>Substituir relatório</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <NotaDetails nota={details} onOpenChange={(open) => !open && setDetails(null)} />
+      <GenerationDialog
+        nota={generating} armazens={armazens} loading={loadingArmazens} busca={destinatarioBusca} onBusca={setDestinatarioBusca}
+        destinatario={destinatario} onDestinatario={setDestinatario} cfop={cfop} onCfop={setCfop} natureza={natureza} onNatureza={setNatureza}
+        cst={cst} onCst={setCst} dadosAdicionais={dadosAdicionais} onDadosAdicionais={setDadosAdicionais}
+        onClose={() => setGenerating(null)} onGenerate={() => {
+          if (!generating || !destinatario || !cfop.trim() || !natureza.trim() || !cst.trim()) return toast.error("Preencha destinatário, CFOP, natureza da operação e CST.");
+          const nota = buildRft006Nota(generating, { destinatario, cfop, naturezaOperacao: natureza, cst, dadosAdicionais });
+          navigate("/preview", { state: { notas: [nota], warnings: [] } });
+        }}
+      />
     </Layout>
   );
+}
+
+function GenerationDialog(props: { nota: Rft006NotaGroup | null; armazens: import("@/lib/types").Armazem[]; loading: boolean; busca: string; onBusca: (v: string) => void; destinatario: NotaParty | null; onDestinatario: (v: NotaParty) => void; cfop: string; onCfop: (v: string) => void; natureza: string; onNatureza: (v: string) => void; cst: string; onCst: (v: string) => void; dadosAdicionais: string; onDadosAdicionais: (v: string) => void; onClose: () => void; onGenerate: () => void }) {
+  const filtered = useMemo(() => {
+    const q = props.busca.toLocaleLowerCase("pt-BR").trim();
+    return props.armazens.filter((item) => item.ativo !== false && (!q || [item.razao_social, item.cnpj_cpf, item.municipio].some((value) => value?.toLocaleLowerCase("pt-BR").includes(q))));
+  }, [props.armazens, props.busca]);
+  const party = (item: import("@/lib/types").Armazem): NotaParty => ({ nome: item.razao_social, cpfCnpj: item.cnpj_cpf ?? "", ie: item.inscricao_estadual ?? "", endereco: item.endereco ?? "", bairro: item.bairro ?? "", cep: item.cep ?? "", municipio: item.municipio ?? "", uf: item.uf ?? "" });
+  return <Dialog open={!!props.nota} onOpenChange={(open) => !open && props.onClose()}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Configurar modelo da Nota {props.nota?.nota}</DialogTitle><DialogDescription>Os dados valem somente para esta geração e poderão ser revisados na prévia.</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>Destinatário</Label><Input placeholder="Pesquisar nome, CPF/CNPJ ou município" value={props.busca} onChange={(e) => props.onBusca(e.target.value)} /><div className="max-h-40 overflow-auto rounded-md border">{props.loading ? <p className="p-3 text-sm text-muted-foreground">Carregando...</p> : filtered.map((item) => <button type="button" key={item.id} onClick={() => props.onDestinatario(party(item))} className={`block w-full border-b p-2 text-left text-sm last:border-0 hover:bg-muted ${props.destinatario?.cpfCnpj === item.cnpj_cpf ? "bg-muted" : ""}`}><span className="font-medium">{item.razao_social}</span><span className="ml-2 text-muted-foreground">{item.cnpj_cpf || "sem CPF/CNPJ"}</span></button>)}</div>{props.destinatario && <p className="text-sm text-primary">Selecionado: {props.destinatario.nome}</p>}</div><div className="grid gap-3 sm:grid-cols-3"><Field label="CFOP do novo modelo" value={props.cfop} onChange={props.onCfop} /><Field label="Natureza da operação" value={props.natureza} onChange={props.onNatureza} /><Field label="CST" value={props.cst} onChange={props.onCst} /></div><div className="space-y-1.5"><Label>Dados adicionais</Label><Textarea rows={5} value={props.dadosAdicionais} onChange={(e) => props.onDadosAdicionais(e.target.value)} /></div></div><DialogFooter><Button variant="outline" onClick={props.onClose}>Cancelar</Button><Button onClick={props.onGenerate}>Abrir prévia</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <div className="space-y-1.5"><Label>{label}</Label><Input value={value} onChange={(event) => onChange(event.target.value)} /></div>;
 }
 
 function StatusBadge({ status }: { status: Rft006NotaGroup["situacao"] }) {
