@@ -352,14 +352,23 @@ export function buildRft006ProductRows(nota: Nota): string[][] {
     valueOrDash(nota.cfop),
     valueOrDash(item.unidade),
     NUM(item.quantidade),
-    BRL_UNIT(item.valorUnitario),
-    BRL(item.valorBruto),
-    BRL(item.desconto),
+    BRL_UNIT(getRft006DisplayUnitValue(item)),
     BRL(item.valorLiquido),
   ]);
 }
 
-const RFT006_PRODUCT_COLUMN_PROPORTIONS = [0.205, 0.08, 0.045, 0.055, 0.04, 0.09, 0.12, 0.105, 0.095, 0.165] as const;
+export function getRft006DisplayUnitValue(item: NonNullable<Nota["itens"]>[number]) {
+  // Valor exclusivamente de apresentação: preserva o unitário bruto importado no item.
+  return item.quantidade > 0 ? item.valorLiquido / item.quantidade : 0;
+}
+
+export function getRft006LiquidTotal(nota: Nota) {
+  return (nota.itens ?? []).reduce((total, item) => total + item.valorLiquido, 0);
+}
+
+export const RFT006_PRODUCT_HEADERS = ["PRODUTO / SERVIÇO", "NCM/SH", "CST", "CFOP", "UN", "QUANTIDADE", "VALOR UNITÁRIO", "VALOR LÍQUIDO"] as const;
+
+const RFT006_PRODUCT_COLUMN_PROPORTIONS = [0.29, 0.09, 0.055, 0.065, 0.05, 0.105, 0.16, 0.185] as const;
 
 export function buildRft006ProductColumnWidths(contentWidth: number): number[] {
   // Todas as células derivam da mesma largura útil; o ajuste final absorve apenas eventual erro de ponto flutuante.
@@ -377,7 +386,7 @@ function drawRft006ProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: num
     tableWidth: ctx.contentWidth,
     theme: "grid",
     showHead: "everyPage",
-    head: [["PRODUTO / SERVIÇO", "NCM/SH", "CST", "CFOP", "UN", "QUANTIDADE", "VALOR UNITÁRIO", "VALOR BRUTO", "DESCONTO", "VALOR LÍQUIDO"]],
+    head: [[...RFT006_PRODUCT_HEADERS]],
     body: buildRft006ProductRows(nota),
     styles: { font: "helvetica", fontSize: 5.5, cellPadding: 1.1, lineColor: BORDER, lineWidth: 0.18, textColor: RED, fontStyle: "bold", valign: "top" },
     headStyles: { fillColor: BLUE, textColor: [18, 24, 35], fontStyle: "bold", halign: "center", fontSize: 4.9 },
@@ -500,11 +509,8 @@ function drawRft006Totals(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   y = ensureSpace(doc, ctx, y, 15);
   drawSectionTitle(doc, ctx, "TOTAIS", ctx.margin, y, ctx.contentWidth);
   y += 4.4;
-  const w = ctx.contentWidth / 3;
   const h = 9.6;
-  drawField(doc, "Valor bruto dos produtos", BRL(nota.valorTotal), ctx.margin, y, w, h, { bold: true, align: "right", valueColor: RED });
-  drawField(doc, "Desconto", BRL(nota.valorDesconto ?? 0), ctx.margin + w, y, w, h, { bold: true, align: "right", valueColor: RED });
-  drawField(doc, "Valor líquido / Valor total da nota", BRL(nota.valorLiquido ?? 0), ctx.margin + w * 2, y, w, h, { bold: true, align: "right", valueColor: RED });
+  drawField(doc, "Valor líquido / Valor total da nota", BRL(getRft006LiquidTotal(nota)), ctx.margin, y, ctx.contentWidth, h, { bold: true, align: "right", valueColor: RED });
   return y + h + 1.8;
 }
 

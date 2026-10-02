@@ -20,6 +20,7 @@ import { useArmazens, useRft006Config, useSaveRft006Config } from "@/lib/db";
 import type { NotaParty } from "@/lib/nota";
 import { buildRft006Nota } from "@/lib/rft006Nota";
 import { armazemToNotaParty, canSaveRft006Default, initializeRft006Config, isValidRft006Recipient, selectRegisteredRft006Recipient, startManualRft006Recipient } from "@/lib/rft006Config";
+import { RFT006_FIXED_DEFAULTS } from "@/lib/rft006FixedDefaults";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 6 });
@@ -97,18 +98,18 @@ export default function Rft006() {
 
   const summary = report ? summarizeRft006(report) : null;
   const startGeneration = (nota: Rft006NotaGroup) => {
-    // Reinicia o estado local; o padrão persistido será aplicado uma única vez pelo efeito acima.
-    configInitialized.current = false;
-    setGenerationConfigReady(false);
+    // Padrão operacional temporário tem precedência sobre o padrão persistido, mas continua editável nesta geração.
+    configInitialized.current = true;
+    setGenerationConfigReady(true);
     setGenerating(nota);
     setDestinatarioId(null);
-    setDestinatario(null);
-    setDestinatarioMode("cadastro");
+    setDestinatario({ ...RFT006_FIXED_DEFAULTS.destinatario });
+    setDestinatarioMode("manual");
     setDestinatarioBusca("");
-    setCfop("");
-    setNatureza("");
-    setCst("");
-    setDadosAdicionais("");
+    setCfop(RFT006_FIXED_DEFAULTS.cfop);
+    setNatureza(RFT006_FIXED_DEFAULTS.naturezaOperacao);
+    setCst(RFT006_FIXED_DEFAULTS.cst);
+    setDadosAdicionais(RFT006_FIXED_DEFAULTS.dadosAdicionaisTemplate);
     setDefaultLoaded(false);
     setDestinatarioNeedsReselection(false);
   };

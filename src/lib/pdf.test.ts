@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPdfDocument, buildRft006PageLabel, buildRft006ProductColumnWidths, buildRft006ProductRows, pdfDataUri } from "./pdf";
+import { buildPdfDocument, buildRft006PageLabel, buildRft006ProductColumnWidths, buildRft006ProductRows, getRft006DisplayUnitValue, getRft006LiquidTotal, pdfDataUri, RFT006_PRODUCT_HEADERS } from "./pdf";
 import { buildRft006Nota } from "./rft006Nota";
 import type { Rft006NotaGroup } from "./rft006";
 import type { Nota } from "./nota";
@@ -60,22 +60,30 @@ describe("pdfDataUri", () => {
     expect(buildPdfDocument([notaGenerica]).getNumberOfPages()).toBe(1);
   });
 
-  it("monta todas as linhas RFT006 com dados e valores preservados", () => {
+  it("monta as linhas RFT006 com unitário líquido e sem expor bruto/desconto", () => {
     const nota = rft006Nota(2);
     expect(buildRft006ProductRows(nota)).toEqual([
-      ["Produto 1", "12019001", "040", "5102", "KG", "10,00", "R$ 5,123456", "R$ 51,23", "R$ 1,23", "R$ 50,00"],
-      ["Produto 2", "12019002", "040", "5102", "SC", "11,00", "R$ 6,123456", "R$ 61,23", "R$ 2,23", "R$ 59,00"],
+      ["Produto 1", "12019001", "040", "5102", "KG", "10,00", "R$ 5,000000", "R$ 50,00"],
+      ["Produto 2", "12019002", "040", "5102", "SC", "11,00", "R$ 5,363636", "R$ 59,00"],
     ]);
+    expect(getRft006DisplayUnitValue(nota.itens![0])).toBe(5);
+    expect(getRft006DisplayUnitValue(nota.itens![0])).not.toBe(nota.itens![0].valorUnitario);
+    expect(nota.itens![0]).toMatchObject({ valorUnitario: 5.123456, valorBruto: 51.23, desconto: 1.23 });
+    expect(RFT006_PRODUCT_HEADERS).toContain("VALOR UNITÁRIO");
+    expect(RFT006_PRODUCT_HEADERS).toContain("VALOR LÍQUIDO");
+    expect(RFT006_PRODUCT_HEADERS).not.toContain("VALOR BRUTO");
+    expect(RFT006_PRODUCT_HEADERS).not.toContain("DESCONTO");
+    expect(getRft006LiquidTotal(nota)).toBe(109);
   });
 
   it("faz a grade RFT006 ocupar exatamente toda a largura útil", () => {
     const contentWidth = 210 - 18;
     const widths = buildRft006ProductColumnWidths(contentWidth);
 
-    expect(widths).toHaveLength(10);
+    expect(widths).toHaveLength(8);
     expect(widths.reduce((total, width) => total + width, 0)).toBe(contentWidth);
     expect(widths[0]).toBeGreaterThan(widths[2]);
-    expect(widths[9]).toBeGreaterThan(widths[3]);
+    expect(widths[7]).toBeGreaterThan(widths[3]);
   });
 
   it("pagina muitos itens RFT006 sem perder as linhas finais", () => {
