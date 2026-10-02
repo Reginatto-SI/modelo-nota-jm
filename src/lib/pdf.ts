@@ -295,7 +295,10 @@ function drawHeaderAndDanfe(doc: jsPDF, ctx: DrawContext, nota: Nota) {
   doc.text("1 - Saída", danfeX + danfeW / 2, y + 20, { align: "center" });
   doc.text("Nº 000.000.000", danfeX + danfeW / 2, y + 23.5, { align: "center" });
   doc.text("SÉRIE: ____", danfeX + danfeW / 2, y + 26.5, { align: "center" });
-  doc.text("FOLHA: 1 de 1", danfeX + danfeW / 2, y + 29, { align: "center" });
+  // No RFT006, a folha é escrita após a tabela definir a quantidade real de páginas.
+  if (nota.sourceType !== "rft006") {
+    doc.text("FOLHA: 1 de 1", danfeX + danfeW / 2, y + 29, { align: "center" });
+  }
 
   drawDanfeVisualBarcode(doc, rightX + 2.3, y + 1.2, rightW - 4.6, 8.8);
   doc.line(rightX, y + 11, rightX + rightW, y + 11);
@@ -323,7 +326,9 @@ function drawNatureza(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   drawField(
     doc,
     "Modelo / Natureza cadastrada",
-    `${valueOrDash(nota.nomeModelo)} — ${valueOrDash(nota.naturezaOperacao)}`,
+    nota.sourceType === "rft006"
+      ? `${valueOrDash(nota.naturezaOperacao)} — Nota de referência: ${valueOrDash(nota.notaReferencia)}`
+      : `${valueOrDash(nota.nomeModelo)} — ${valueOrDash(nota.naturezaOperacao)}`,
     ctx.margin,
     y,
     ctx.contentWidth * 0.82,
@@ -336,6 +341,45 @@ function drawNatureza(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
     valueColor: RED,
   });
   return y + 10.6;
+}
+
+export function buildRft006ProductRows(nota: Nota): string[][] {
+  // `itens` é a fonte oficial; o produto singular é apenas compatibilidade estrutural.
+  return (nota.itens ?? []).map((item) => [
+    valueOrDash(item.descricao),
+    valueOrDash(item.ncm),
+    valueOrDash(nota.cst),
+    valueOrDash(nota.cfop),
+    valueOrDash(item.unidade),
+    NUM(item.quantidade),
+    BRL_UNIT(item.valorUnitario),
+    BRL(item.valorBruto),
+    BRL(item.desconto),
+    BRL(item.valorLiquido),
+  ]);
+}
+
+function drawRft006ProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
+  drawSectionTitle(doc, ctx, "DADOS DO PRODUTO / SERVIÇO", ctx.margin, y, ctx.contentWidth);
+  y += 4.4;
+  autoTable(doc, {
+    startY: y,
+    margin: { left: ctx.margin, right: ctx.margin, bottom: ctx.pageHeight - ctx.footerTop + 2 },
+    tableWidth: ctx.contentWidth,
+    theme: "grid",
+    showHead: "everyPage",
+    head: [["PRODUTO / SERVIÇO", "NCM/SH", "CST", "CFOP", "UN", "QUANTIDADE", "VALOR UNITÁRIO", "VALOR BRUTO", "DESCONTO", "VALOR LÍQUIDO"]],
+    body: buildRft006ProductRows(nota),
+    styles: { font: "helvetica", fontSize: 5.5, cellPadding: 1.1, lineColor: BORDER, lineWidth: 0.18, textColor: RED, fontStyle: "bold", valign: "top" },
+    headStyles: { fillColor: BLUE, textColor: [18, 24, 35], fontStyle: "bold", halign: "center", fontSize: 4.9 },
+    columnStyles: {
+      0: { cellWidth: 35 }, 1: { cellWidth: 15 }, 2: { cellWidth: 10 }, 3: { cellWidth: 11 }, 4: { cellWidth: 8 },
+      5: { cellWidth: 17, halign: "right" }, 6: { cellWidth: 21, halign: "right" }, 7: { cellWidth: 20, halign: "right" },
+      8: { cellWidth: 18, halign: "right" }, 9: { cellWidth: 21, halign: "right" },
+    },
+    didDrawPage: () => drawFooter(doc, ctx),
+  });
+  return ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y + 14) + 2;
 }
 
 function drawProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
@@ -444,6 +488,18 @@ function drawTaxBlock(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   return y + h + 1.8;
 }
 
+function drawRft006Totals(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
+  y = ensureSpace(doc, ctx, y, 15);
+  drawSectionTitle(doc, ctx, "TOTAIS", ctx.margin, y, ctx.contentWidth);
+  y += 4.4;
+  const w = ctx.contentWidth / 3;
+  const h = 9.6;
+  drawField(doc, "Valor bruto dos produtos", BRL(nota.valorTotal), ctx.margin, y, w, h, { bold: true, align: "right", valueColor: RED });
+  drawField(doc, "Desconto", BRL(nota.valorDesconto ?? 0), ctx.margin + w, y, w, h, { bold: true, align: "right", valueColor: RED });
+  drawField(doc, "Valor líquido / Valor total da nota", BRL(nota.valorLiquido ?? 0), ctx.margin + w * 2, y, w, h, { bold: true, align: "right", valueColor: RED });
+  return y + h + 1.8;
+}
+
 function drawTransportBlock(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   y = ensureSpace(doc, ctx, y, 27);
   drawSectionTitle(doc, ctx, "TRANSPORTADOR / VOLUMES TRANSPORTADOS", ctx.margin, y, ctx.contentWidth);
@@ -540,27 +596,66 @@ function drawNota(doc: jsPDF, nota: Nota) {
   y += 1.6;
   y = drawPartyBlock(doc, ctx, "DESTINATÁRIO / REMETENTE", nota.destinatario, ctx.margin, y, ctx.contentWidth);
   y += 1.8;
-  y = drawProductTable(doc, ctx, nota, y);
-  y = drawTaxBlock(doc, ctx, nota, y);
-  y = drawTransportBlock(doc, ctx, nota, y);
+  y = nota.sourceType === "rft006" ? drawRft006ProductTable(doc, ctx, nota, y) : drawProductTable(doc, ctx, nota, y);
+  y = nota.sourceType === "rft006" ? drawRft006Totals(doc, ctx, nota, y) : drawTaxBlock(doc, ctx, nota, y);
+  // No RFT006, transporte vazio não ganha conteúdo presumido; o GRL019 permanece inalterado.
+  if (nota.sourceType !== "rft006" || nota.tpFrete.trim() || nota.transportador.trim() || nota.placaVeiculo.trim()) {
+    y = drawTransportBlock(doc, ctx, nota, y);
+  }
   drawAdditionalData(doc, ctx, nota, y);
   drawFooter(doc, ctx);
 }
 
+export function buildRft006PageLabel(currentPage: number, totalPages: number) {
+  return `FOLHA: ${currentPage} de ${totalPages}`;
+}
+
+function drawRft006PageIdentification(doc: jsPDF, nota: Nota, firstPage: number, lastPage: number) {
+  const totalPages = lastPage - firstPage + 1;
+  const margin = 9;
+  const contentWidth = doc.internal.pageSize.getWidth() - margin * 2;
+  const danfeCenterX = margin + contentWidth * 0.51 + (contentWidth * 0.12) / 2;
+
+  // Pós-processa apenas as páginas desta Nota, depois que o autoTable determinou o total real.
+  for (let page = firstPage; page <= lastPage; page += 1) {
+    const currentPage = page - firstPage + 1;
+    doc.setPage(page);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(18, 24, 35);
+    if (currentPage === 1) {
+      doc.setFontSize(4.9);
+      doc.text(buildRft006PageLabel(currentPage, totalPages), danfeCenterX, margin + 10 + 29, { align: "center" });
+    } else {
+      doc.setFontSize(6.2);
+      doc.text(
+        `RFT006 - Nota de referencia: ${valueOrDash(nota.notaReferencia)} - ${buildRft006PageLabel(currentPage, totalPages)}`,
+        margin,
+        6.5,
+      );
+    }
+  }
+  doc.setPage(lastPage);
+  setBaseStyle(doc);
+}
+
 export function generatePdf(notas: Nota[], fileName = "modelo-nota-jm.pdf") {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  notas.forEach((n, i) => {
-    if (i > 0) doc.addPage();
-    drawNota(doc, n);
-  });
+  const doc = buildPdfDocument(notas);
   doc.save(fileName);
 }
 
-export function pdfDataUri(notas: Nota[]): string {
+export function buildPdfDocument(notas: Nota[]) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   notas.forEach((n, i) => {
     if (i > 0) doc.addPage();
+    const firstPage = doc.getNumberOfPages();
     drawNota(doc, n);
+    if (n.sourceType === "rft006") {
+      drawRft006PageIdentification(doc, n, firstPage, doc.getNumberOfPages());
+    }
   });
-  return doc.output("datauristring");
+  return doc;
+}
+
+export function pdfDataUri(notas: Nota[]): string {
+  return buildPdfDocument(notas).output("datauristring");
 }
