@@ -199,8 +199,8 @@ export default function Pesquisa() {
     <Layout>
       <div className="space-y-6">
         <div>
-          {/* Título alinhado à finalidade real da tela: localizar contrato e gerar o modelo. */}
-          <h1 className="text-2xl font-bold">Gerar Modelo de Nota</h1>
+          {/* Título visual acompanha o rótulo compacto do menu; os identificadores técnicos permanecem inalterados. */}
+          <h1 className="text-2xl font-bold">GRL 19 — Gerar modelo</h1>
           <p className="text-sm text-muted-foreground">
             Localize o contrato por número, produtor, CPF/CNPJ, produto, observação ou modelo e gere o modelo de nota.
           </p>

@@ -19,7 +19,7 @@ import { RFT006_SITUACOES, summarizeRft006 } from "@/lib/rft006View";
 import { useArmazens, useRft006Config, useSaveRft006Config } from "@/lib/db";
 import type { NotaParty } from "@/lib/nota";
 import { buildRft006Nota } from "@/lib/rft006Nota";
-import { armazemToNotaParty, initializeRft006Config } from "@/lib/rft006Config";
+import { armazemToNotaParty, canSaveRft006Default, initializeRft006Config, isValidRft006Recipient, selectRegisteredRft006Recipient, startManualRft006Recipient } from "@/lib/rft006Config";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 6 });
@@ -36,6 +36,7 @@ export default function Rft006() {
   const [generating, setGenerating] = useState<Rft006NotaGroup | null>(null);
   const [destinatarioId, setDestinatarioId] = useState<string | null>(null);
   const [destinatario, setDestinatario] = useState<NotaParty | null>(null);
+  const [destinatarioMode, setDestinatarioMode] = useState<"cadastro" | "manual">("cadastro");
   const [cfop, setCfop] = useState("");
   const [natureza, setNatureza] = useState("");
   const [cst, setCst] = useState("");
@@ -63,6 +64,7 @@ export default function Rft006() {
     const applied = initializeRft006Config(loadedConfig, armazens);
     setDestinatarioId(applied.destinatarioId);
     setDestinatario(applied.destinatario);
+    setDestinatarioMode("cadastro");
     setCfop(applied.cfop);
     setNatureza(applied.naturezaOperacao);
     setCst(applied.cst);
@@ -101,6 +103,7 @@ export default function Rft006() {
     setGenerating(nota);
     setDestinatarioId(null);
     setDestinatario(null);
+    setDestinatarioMode("cadastro");
     setDestinatarioBusca("");
     setCfop("");
     setNatureza("");
@@ -111,8 +114,8 @@ export default function Rft006() {
   };
 
   const validateGenerationFields = () => {
-    if (!destinatarioId || !destinatario || !cfop.trim() || !natureza.trim() || !cst.trim()) {
-      toast.error("Preencha destinatário, CFOP, natureza da operação e CST.");
+    if (!isValidRft006Recipient(destinatario) || !cfop.trim() || !natureza.trim() || !cst.trim()) {
+      toast.error("Preencha nome e CPF/CNPJ do destinatário, CFOP, natureza da operação e CST.");
       return false;
     }
     return true;
@@ -122,7 +125,8 @@ export default function Rft006() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Gerar modelo avulso — RFT006</h1>
+          {/* Título visual acompanha o rótulo compacto do menu; o relatório continua tecnicamente RFT006. */}
+          <h1 className="text-2xl font-bold">RFT 6 — Gerar modelo</h1>
           <p className="text-sm text-muted-foreground">Importe o relatório, confira as Notas agrupadas e seus diagnósticos. Os dados ficam somente neste navegador.</p>
         </div>
 
@@ -155,10 +159,12 @@ export default function Rft006() {
       <NotaDetails nota={details} onOpenChange={(open) => !open && setDetails(null)} />
       <GenerationDialog
         nota={generating} armazens={armazens} loading={loadingArmazens} configReady={generationConfigReady} busca={destinatarioBusca} onBusca={setDestinatarioBusca}
-        destinatarioId={destinatarioId} destinatario={destinatario} onDestinatario={(id, party) => { setDestinatarioId(id); setDestinatario(party); setDestinatarioNeedsReselection(false); }} cfop={cfop} onCfop={setCfop} natureza={natureza} onNatureza={setNatureza}
+        destinatarioMode={destinatarioMode} onDestinatarioMode={(mode) => { setDestinatarioMode(mode); if (mode === "manual") { const selection = startManualRft006Recipient(); setDestinatarioId(selection.destinatarioId); setDestinatario(selection.destinatario); } else { setDestinatarioId(null); setDestinatario(null); } setDestinatarioNeedsReselection(false); }}
+        destinatarioId={destinatarioId} destinatario={destinatario} onDestinatario={(id, party) => { const selection = selectRegisteredRft006Recipient(id, party); setDestinatarioId(selection.destinatarioId); setDestinatario(selection.destinatario); setDestinatarioNeedsReselection(false); }} onManualDestinatario={setDestinatario} cfop={cfop} onCfop={setCfop} natureza={natureza} onNatureza={setNatureza}
         cst={cst} onCst={setCst} dadosAdicionais={dadosAdicionais} onDadosAdicionais={setDadosAdicionais}
         defaultLoaded={defaultLoaded} destinatarioNeedsReselection={destinatarioNeedsReselection} savingDefault={saveConfig.isPending}
         onSaveDefault={() => {
+          if (!canSaveRft006Default(destinatarioId)) return toast.error("Para salvar como padrão, selecione um destinatário cadastrado.");
           if (!validateGenerationFields()) return;
           saveConfig.mutate({ destinatarioId, cfop, naturezaOperacao: natureza, cst, dadosAdicionaisTemplate: dadosAdicionais });
         }}
@@ -172,12 +178,13 @@ export default function Rft006() {
   );
 }
 
-function GenerationDialog(props: { nota: Rft006NotaGroup | null; armazens: import("@/lib/types").Armazem[]; loading: boolean; configReady: boolean; busca: string; onBusca: (v: string) => void; destinatarioId: string | null; destinatario: NotaParty | null; onDestinatario: (id: string, v: NotaParty) => void; cfop: string; onCfop: (v: string) => void; natureza: string; onNatureza: (v: string) => void; cst: string; onCst: (v: string) => void; dadosAdicionais: string; onDadosAdicionais: (v: string) => void; defaultLoaded: boolean; destinatarioNeedsReselection: boolean; savingDefault: boolean; onSaveDefault: () => void; onClose: () => void; onGenerate: () => void }) {
+function GenerationDialog(props: { nota: Rft006NotaGroup | null; armazens: import("@/lib/types").Armazem[]; loading: boolean; configReady: boolean; busca: string; onBusca: (v: string) => void; destinatarioMode: "cadastro" | "manual"; onDestinatarioMode: (mode: "cadastro" | "manual") => void; destinatarioId: string | null; destinatario: NotaParty | null; onDestinatario: (id: string, v: NotaParty) => void; onManualDestinatario: (v: NotaParty) => void; cfop: string; onCfop: (v: string) => void; natureza: string; onNatureza: (v: string) => void; cst: string; onCst: (v: string) => void; dadosAdicionais: string; onDadosAdicionais: (v: string) => void; defaultLoaded: boolean; destinatarioNeedsReselection: boolean; savingDefault: boolean; onSaveDefault: () => void; onClose: () => void; onGenerate: () => void }) {
   const filtered = useMemo(() => {
     const q = props.busca.toLocaleLowerCase("pt-BR").trim();
     return props.armazens.filter((item) => item.ativo !== false && (!q || [item.razao_social, item.cnpj_cpf, item.municipio].some((value) => value?.toLocaleLowerCase("pt-BR").includes(q))));
   }, [props.armazens, props.busca]);
-  return <Dialog open={!!props.nota} onOpenChange={(open) => !open && props.onClose()}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Configurar modelo da Nota {props.nota?.nota}</DialogTitle><DialogDescription>Alterações feitas aqui valem somente para esta geração, salvo se você clicar em “Salvar como padrão”.</DialogDescription></DialogHeader><div className="space-y-4">{!props.configReady && <p className="text-sm text-muted-foreground">Carregando configuração padrão...</p>}{props.defaultLoaded && <p className="text-xs text-muted-foreground">Configuração padrão carregada</p>}<div className="space-y-2"><Label>Destinatário</Label><Input disabled={!props.configReady} placeholder="Pesquisar nome, CPF/CNPJ ou município" value={props.busca} onChange={(e) => props.onBusca(e.target.value)} /><div className="max-h-40 overflow-auto rounded-md border">{props.loading ? <p className="p-3 text-sm text-muted-foreground">Carregando...</p> : filtered.map((item) => <button type="button" disabled={!props.configReady} key={item.id} onClick={() => props.onDestinatario(item.id, armazemToNotaParty(item))} className={`block w-full border-b p-2 text-left text-sm last:border-0 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 ${props.destinatarioId === item.id ? "bg-muted" : ""}`}><span className="font-medium">{item.razao_social}</span><span className="ml-2 text-muted-foreground">{item.cnpj_cpf || "sem CPF/CNPJ"}</span></button>)}</div>{props.destinatario && <p className="text-sm text-primary">Selecionado: {props.destinatario.nome}</p>}{props.destinatarioNeedsReselection && <p className="text-sm text-warning">O destinatário padrão não está disponível ou está inativo. Selecione-o novamente.</p>}</div><div className="grid gap-3 sm:grid-cols-3"><Field disabled={!props.configReady} label="CFOP do novo modelo" value={props.cfop} onChange={props.onCfop} /><Field disabled={!props.configReady} label="Natureza da operação" value={props.natureza} onChange={props.onNatureza} /><Field disabled={!props.configReady} label="CST" value={props.cst} onChange={props.onCst} /></div><div className="space-y-1.5"><Label>Dados adicionais</Label><Textarea disabled={!props.configReady} rows={5} value={props.dadosAdicionais} onChange={(e) => props.onDadosAdicionais(e.target.value)} /></div></div><DialogFooter className="gap-2 sm:justify-between"><Button variant="outline" onClick={props.onClose}>Cancelar</Button><div className="flex flex-col-reverse gap-2 sm:flex-row"><Button variant="secondary" onClick={props.onSaveDefault} disabled={!props.configReady || props.savingDefault}><Save className="mr-1 h-4 w-4" />{props.savingDefault ? "Salvando..." : "Salvar como padrão"}</Button><Button onClick={props.onGenerate} disabled={!props.configReady}>Abrir prévia</Button></div></DialogFooter></DialogContent></Dialog>;
+  const manual = props.destinatario ?? startManualRft006Recipient().destinatario!;
+  return <Dialog open={!!props.nota} onOpenChange={(open) => !open && props.onClose()}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Configurar modelo da Nota {props.nota?.nota}</DialogTitle><DialogDescription>Alterações feitas aqui valem somente para esta geração, salvo se você clicar em “Salvar como padrão”.</DialogDescription></DialogHeader><div className="space-y-4">{!props.configReady && <p className="text-sm text-muted-foreground">Carregando configuração padrão...</p>}{props.defaultLoaded && <p className="text-xs text-muted-foreground">Configuração padrão carregada</p>}<div className="space-y-2"><Label>Destinatário</Label><div className="flex gap-2"><Button type="button" size="sm" variant={props.destinatarioMode === "cadastro" ? "default" : "outline"} onClick={() => props.onDestinatarioMode("cadastro")}>Selecionar do cadastro</Button><Button type="button" size="sm" variant={props.destinatarioMode === "manual" ? "default" : "outline"} onClick={() => props.onDestinatarioMode("manual")}>Preencher manualmente</Button></div>{props.destinatarioMode === "cadastro" ? <><Input disabled={!props.configReady} placeholder="Pesquisar nome, CPF/CNPJ ou município" value={props.busca} onChange={(e) => props.onBusca(e.target.value)} /><div className="max-h-40 overflow-auto rounded-md border">{props.loading ? <p className="p-3 text-sm text-muted-foreground">Carregando...</p> : filtered.map((item) => <button type="button" disabled={!props.configReady} key={item.id} onClick={() => props.onDestinatario(item.id, armazemToNotaParty(item))} className={`block w-full border-b p-2 text-left text-sm last:border-0 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 ${props.destinatarioId === item.id ? "bg-muted" : ""}`}><span className="font-medium">{item.razao_social}</span><span className="ml-2 text-muted-foreground">{item.cnpj_cpf || "sem CPF/CNPJ"}</span></button>)}</div>{props.destinatario && <p className="text-sm text-primary">Selecionado: {props.destinatario.nome}</p>}{props.destinatarioNeedsReselection && <p className="text-sm text-warning">O destinatário padrão não está disponível ou está inativo. Selecione-o novamente.</p>}</> : <><div className="grid gap-3 sm:grid-cols-2"><Field disabled={!props.configReady} label="Nome / Razão Social" value={manual.nome} onChange={(nome) => props.onManualDestinatario({ ...manual, nome })} /><Field disabled={!props.configReady} label="CPF/CNPJ" value={manual.cpfCnpj} onChange={(cpfCnpj) => props.onManualDestinatario({ ...manual, cpfCnpj })} /><Field disabled={!props.configReady} label="Inscrição Estadual" value={manual.ie} onChange={(ie) => props.onManualDestinatario({ ...manual, ie })} /><Field disabled={!props.configReady} label="Endereço" value={manual.endereco} onChange={(endereco) => props.onManualDestinatario({ ...manual, endereco })} /><Field disabled={!props.configReady} label="Bairro" value={manual.bairro} onChange={(bairro) => props.onManualDestinatario({ ...manual, bairro })} /><Field disabled={!props.configReady} label="CEP" value={manual.cep} onChange={(cep) => props.onManualDestinatario({ ...manual, cep })} /><Field disabled={!props.configReady} label="Município" value={manual.municipio} onChange={(municipio) => props.onManualDestinatario({ ...manual, municipio })} /><Field disabled={!props.configReady} label="UF" value={manual.uf} onChange={(uf) => props.onManualDestinatario({ ...manual, uf })} /></div><p className="text-xs text-muted-foreground">Este destinatário vale somente para esta geração e não será salvo no cadastro.</p></>}</div><div className="grid gap-3 sm:grid-cols-3"><Field disabled={!props.configReady} label="CFOP do novo modelo" value={props.cfop} onChange={props.onCfop} /><Field disabled={!props.configReady} label="Natureza da operação" value={props.natureza} onChange={props.onNatureza} /><Field disabled={!props.configReady} label="CST" value={props.cst} onChange={props.onCst} /></div><div className="space-y-1.5"><Label>Dados adicionais</Label><Textarea disabled={!props.configReady} rows={5} value={props.dadosAdicionais} onChange={(e) => props.onDadosAdicionais(e.target.value)} /></div></div><DialogFooter className="gap-2 sm:justify-between"><Button variant="outline" onClick={props.onClose}>Cancelar</Button><div className="flex flex-col-reverse gap-2 sm:flex-row"><Button variant="secondary" onClick={props.onSaveDefault} disabled={!props.configReady || props.savingDefault || !canSaveRft006Default(props.destinatarioId)} title={!props.destinatarioId ? "Para salvar como padrão, selecione um destinatário cadastrado." : undefined}><Save className="mr-1 h-4 w-4" />{props.savingDefault ? "Salvando..." : "Salvar como padrão"}</Button><Button onClick={props.onGenerate} disabled={!props.configReady}>Abrir prévia</Button></div></DialogFooter></DialogContent></Dialog>;
 }
 
 function Field({ label, value, onChange, disabled = false }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {

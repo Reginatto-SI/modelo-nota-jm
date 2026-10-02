@@ -359,6 +359,15 @@ export function buildRft006ProductRows(nota: Nota): string[][] {
   ]);
 }
 
+const RFT006_PRODUCT_COLUMN_PROPORTIONS = [0.205, 0.08, 0.045, 0.055, 0.04, 0.09, 0.12, 0.105, 0.095, 0.165] as const;
+
+export function buildRft006ProductColumnWidths(contentWidth: number): number[] {
+  // Todas as células derivam da mesma largura útil; o ajuste final absorve apenas eventual erro de ponto flutuante.
+  const widths = RFT006_PRODUCT_COLUMN_PROPORTIONS.map((proportion) => contentWidth * proportion);
+  widths[widths.length - 1] += contentWidth - widths.reduce((total, width) => total + width, 0);
+  return widths;
+}
+
 function drawRft006ProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: number) {
   drawSectionTitle(doc, ctx, "DADOS DO PRODUTO / SERVIÇO", ctx.margin, y, ctx.contentWidth);
   y += 4.4;
@@ -372,11 +381,10 @@ function drawRft006ProductTable(doc: jsPDF, ctx: DrawContext, nota: Nota, y: num
     body: buildRft006ProductRows(nota),
     styles: { font: "helvetica", fontSize: 5.5, cellPadding: 1.1, lineColor: BORDER, lineWidth: 0.18, textColor: RED, fontStyle: "bold", valign: "top" },
     headStyles: { fillColor: BLUE, textColor: [18, 24, 35], fontStyle: "bold", halign: "center", fontSize: 4.9 },
-    columnStyles: {
-      0: { cellWidth: 35 }, 1: { cellWidth: 15 }, 2: { cellWidth: 10 }, 3: { cellWidth: 11 }, 4: { cellWidth: 8 },
-      5: { cellWidth: 17, halign: "right" }, 6: { cellWidth: 21, halign: "right" }, 7: { cellWidth: 20, halign: "right" },
-      8: { cellWidth: 18, halign: "right" }, 9: { cellWidth: 21, halign: "right" },
-    },
+    columnStyles: Object.fromEntries(buildRft006ProductColumnWidths(ctx.contentWidth).map((cellWidth, index) => [
+      index,
+      { cellWidth, ...(index >= 5 ? { halign: "right" as const } : {}) },
+    ])),
     didDrawPage: () => drawFooter(doc, ctx),
   });
   return ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y + 14) + 2;

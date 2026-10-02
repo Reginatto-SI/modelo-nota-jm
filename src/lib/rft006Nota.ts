@@ -113,7 +113,8 @@ export function validateRft006Nota(nota: Nota): string[] {
   if (nota.sourceType !== "rft006") return [];
   const errors: string[] = [];
   if (!nota.emitente.nome.trim() || !nota.emitente.cpfCnpj.trim()) errors.push("Informe razão social e CPF/CNPJ do emitente.");
-  if (!nota.destinatario.nome.trim() || !nota.destinatario.cpfCnpj.trim()) errors.push("Selecione um destinatário válido.");
+  // O destinatário pode vir do cadastro ou ser informado somente para esta geração.
+  if (!nota.destinatario.nome.trim() || !nota.destinatario.cpfCnpj.trim()) errors.push("Informe nome e CPF/CNPJ do destinatário.");
   if (!nota.cfop.trim()) errors.push("Informe o CFOP.");
   if (!(nota.cst ?? "").trim()) errors.push("Informe o CST.");
   if (!nota.naturezaOperacao.trim()) errors.push("Informe a natureza da operação.");

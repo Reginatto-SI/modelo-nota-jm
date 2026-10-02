@@ -26,9 +26,9 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = "modeloNotaSidebarCollapsed";
 const nav = [
   { to: "/", label: "Início", icon: Home, end: true },
   { to: "/importar", label: "Importar GRL019", icon: Upload },
-  // Renomeado: a tela localiza um contrato e gera o modelo de nota (não é só pesquisa).
-  { to: "/pesquisa", label: "Gerar modelo por contrato — GRL019", icon: Search },
-  { to: "/rft006", label: "Gerar modelo avulso — RFT006", icon: ReceiptText },
+  // Rótulos compactos preservam a identificação dos relatórios sem truncar no menu expandido.
+  { to: "/pesquisa", label: "GRL 19 — Gerar modelo", icon: Search },
+  { to: "/rft006", label: "RFT 6 — Gerar modelo", icon: ReceiptText },
 ];
 
 const cadastros = [

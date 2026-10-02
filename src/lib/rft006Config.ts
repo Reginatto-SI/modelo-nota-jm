@@ -17,6 +17,31 @@ export interface AppliedRft006Config extends Rft006ConfigValues {
   destinatarioNeedsReselection: boolean;
 }
 
+export type Rft006RecipientSelection = Pick<AppliedRft006Config, "destinatarioId" | "destinatario">;
+
+export const EMPTY_NOTA_PARTY: NotaParty = {
+  nome: "", cpfCnpj: "", ie: "", endereco: "", bairro: "", cep: "", municipio: "", uf: "",
+};
+
+export function startManualRft006Recipient(): Rft006RecipientSelection {
+  // O modo manual sempre começa limpo para não combinar um ID oculto com dados de outro destinatário.
+  return { destinatarioId: null, destinatario: { ...EMPTY_NOTA_PARTY } };
+}
+
+export function selectRegisteredRft006Recipient(id: string, destinatario: NotaParty): Rft006RecipientSelection {
+  // A seleção cadastrada restaura ID e snapshot atual do cadastro como uma única transição.
+  return { destinatarioId: id, destinatario: { ...destinatario } };
+}
+
+export function isValidRft006Recipient(destinatario: NotaParty | null): destinatario is NotaParty {
+  return Boolean(destinatario?.nome.trim() && destinatario.cpfCnpj.trim());
+}
+
+export function canSaveRft006Default(destinatarioId: string | null) {
+  // A configuração singleton continua referenciando exclusivamente um registro de armazéns.
+  return Boolean(destinatarioId);
+}
+
 export const EMPTY_RFT006_CONFIG: AppliedRft006Config = {
   destinatarioId: null,
   destinatario: null,
