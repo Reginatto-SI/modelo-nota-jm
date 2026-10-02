@@ -23,7 +23,18 @@ export interface NotaPdfFileNameMeta {
   produtorNome: string;
 }
 
-export type NotaSourceType = "grl019" | "manual_clone";
+export type NotaSourceType = "grl019" | "manual_clone" | "rft006";
+
+export interface NotaRft006Item {
+  descricao: string;
+  ncm: string;
+  unidade: string;
+  quantidade: number;
+  valorUnitario: number;
+  valorBruto: number;
+  desconto: number;
+  valorLiquido: number;
+}
 
 export interface Nota {
   cfop: string;
@@ -49,6 +60,14 @@ export interface Nota {
   isManualClone?: boolean;
   originalSourceType?: NotaSourceType;
   originalContract?: string | null;
+  /** Extensão exclusiva do fluxo RFT006; o contrato singular do GRL019 permanece intacto. */
+  itens?: NotaRft006Item[];
+  notaReferencia?: string;
+  cst?: string;
+  valorDesconto?: number;
+  valorLiquido?: number;
+  dadosAdicionaisTemplate?: string;
+  dadosAdicionaisManualOverride?: boolean;
 }
 
 function todayISO() {

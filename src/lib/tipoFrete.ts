@@ -29,3 +29,8 @@ export function normalizeTipoFrete(value?: string | null): TipoFrete {
   // Fallback fiscal solicitado quando o modelo não tem tipo de frete padrão cadastrado.
   return TIPO_FRETE_DEFAULT;
 }
+
+export function normalizePreviewTipoFrete(sourceType: string | undefined, value: string): string {
+  // RFT006 não possui regra de frete nesta etapa; somente os fluxos homologados usam o normalizador legado.
+  return sourceType === "rft006" ? value : normalizeTipoFrete(value);
+}
