@@ -156,7 +156,7 @@ export default function Rft006() {
                     <DialogDescription>Confira os filtros que devem ser aplicados no sistema antes de exportar o relatório.</DialogDescription>
                   </DialogHeader>
                   <div className="flex justify-center overflow-auto rounded-md border bg-muted/30 p-2">
-                    <img src="/RFT006 - Filtros_Tutorial.png" alt="Filtros para exportar o relatório RFT006" className="h-auto max-w-full rounded object-contain" />
+                    <img src="/RFT006_Filtros_Tutorial.png" alt="Filtros para exportar o relatório RFT006" className="h-auto max-w-full rounded object-contain" />
                   </div>
                   <DialogFooter>
                     <DialogClose asChild><Button type="button">Fechar</Button></DialogClose>
