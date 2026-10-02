@@ -15,6 +15,7 @@ import TiposContrato from "./pages/cadastros/TiposContrato.tsx";
 import ModelosNota from "./pages/cadastros/ModelosNota.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Rft006 from "./pages/Rft006.tsx";
+import XmlNfe from "./pages/XmlNfe.tsx";
 import { JmAccessGuard } from "./components/JmAccessGuard.tsx";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/importar" element={<Importar />} />
             <Route path="/pesquisa" element={<Pesquisa />} />
             <Route path="/rft006" element={<Rft006 />} />
+            <Route path="/xml-nfe" element={<XmlNfe />} />
             <Route path="/preview" element={<Preview />} />
             <Route path="/cadastros/cooperativas" element={<JmAccessGuard><Cooperativas /></JmAccessGuard>} />
             <Route path="/cadastros/armazens" element={<JmAccessGuard><Armazens /></JmAccessGuard>} />

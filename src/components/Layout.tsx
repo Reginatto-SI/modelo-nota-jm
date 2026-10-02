@@ -10,6 +10,7 @@ import {
   FileText,
   ScrollText,
   ReceiptText,
+  FileCode2,
   LogOut,
   LockKeyhole,
   PanelLeftClose,
@@ -29,6 +30,7 @@ const nav = [
   // Rótulos compactos preservam a identificação dos relatórios sem truncar no menu expandido.
   { to: "/pesquisa", label: "GRL 19 — Gerar modelo", icon: Search },
   { to: "/rft006", label: "RFT 6 — Gerar modelo", icon: ReceiptText },
+  { to: "/xml-nfe", label: "XML NF-e — Gerar PDFs", icon: FileCode2 },
 ];
 
 const cadastros = [
