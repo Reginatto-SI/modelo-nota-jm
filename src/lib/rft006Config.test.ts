@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyRft006Config, buildRft006ConfigPayload, initializeRft006Config, type Rft006ConfigRecord } from "./rft006Config";
+import { applyRft006Config, buildRft006ConfigPayload, canSaveRft006Default, initializeRft006Config, isValidRft006Recipient, selectRegisteredRft006Recipient, startManualRft006Recipient, type Rft006ConfigRecord } from "./rft006Config";
 import type { Armazem } from "./types";
 
 const config: Rft006ConfigRecord = {
@@ -33,6 +33,28 @@ const armazem = (id: string, ativo = true): Armazem => ({
 });
 
 describe("configuração padrão do RFT006", () => {
+  it("inicia o modo manual sem manter ID ou dados do cadastro anterior", () => {
+    const result = startManualRft006Recipient();
+
+    expect(result.destinatarioId).toBeNull();
+    expect(result.destinatario).toEqual({ nome: "", cpfCnpj: "", ie: "", endereco: "", bairro: "", cep: "", municipio: "", uf: "" });
+  });
+
+  it("aceita destinatário manual com nome e CPF/CNPJ sem exigir ID", () => {
+    const manual = { ...startManualRft006Recipient().destinatario!, nome: "Destino avulso", cpfCnpj: "12345678901" };
+
+    expect(isValidRft006Recipient(manual)).toBe(true);
+    expect(startManualRft006Recipient().destinatarioId).toBeNull();
+    expect(canSaveRft006Default(null)).toBe(false);
+  });
+
+  it("restaura ID e todos os dados ao selecionar novamente um cadastro", () => {
+    const party = { nome: "Cadastrado", cpfCnpj: "99", ie: "1", endereco: "Rua", bairro: "Centro", cep: "1", municipio: "Cidade", uf: "MT" };
+
+    expect(selectRegisteredRft006Recipient("destino-c", party)).toEqual({ destinatarioId: "destino-c", destinatario: party });
+    expect(canSaveRft006Default("destino-c")).toBe(true);
+  });
+
   it("libera o formulário vazio quando não há configuração ou a leitura não retorna dados", () => {
     expect(initializeRft006Config(null, [armazem("destino-a")])).toEqual({
       destinatarioId: null,

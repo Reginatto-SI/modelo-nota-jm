@@ -75,6 +75,14 @@ describe("Nota RFT006", () => {
     expect(validateRft006Nota(build())).toEqual([]);
   });
 
+  it("preserva integralmente o destinatário manual ao montar a Nota", () => {
+    const manual: NotaParty = { nome: "Destino manual", cpfCnpj: "12345678901", ie: "", endereco: "Estrada 1", bairro: "Rural", cep: "78000-000", municipio: "Cuiabá", uf: "MT" };
+    const nota = buildRft006Nota(group, { destinatario: manual, cfop: "5102", cst: "040", naturezaOperacao: "Venda", dadosAdicionais: template });
+
+    expect(nota.destinatario).toEqual(manual);
+    expect(validateRft006Nota(nota)).toEqual([]);
+  });
+
   it("define retorno próprio para RFT006", () => {
     const nota = build();
     expect(getPreviewReturnPath([nota])).toBe("/rft006");
