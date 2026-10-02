@@ -1,0 +1,108 @@
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, Eye, FileSpreadsheet, RefreshCw, Trash2, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { Layout } from "@/components/Layout";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { clearRft006Report, loadRft006Report, saveRft006Report } from "@/lib/idb";
+import { parseRft006, type Rft006ImportDiagnostics, type Rft006NotaGroup, type Rft006Report } from "@/lib/rft006";
+import { RFT006_SITUACOES, summarizeRft006 } from "@/lib/rft006View";
+
+const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 6 });
+
+export default function Rft006() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [report, setReport] = useState<Rft006Report | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Rft006Report | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Rft006ImportDiagnostics | null>(null);
+  const [details, setDetails] = useState<Rft006NotaGroup | null>(null);
+
+  useEffect(() => {
+    // O RFT006 e carregado somente da store local propria; nenhum cadastro/backend participa deste fluxo.
+    loadRft006Report().then((saved) => setReport(saved ?? null)).finally(() => setLoading(false));
+  }, []);
+
+  const persist = async (next: Rft006Report) => {
+    await saveRft006Report(next);
+    setReport(next);
+    setDiagnostics(null);
+    toast.success(`RFT006 importado: ${next.rows.length} linhas em ${next.notas.length} Notas.`);
+  };
+
+  const handleFile = async (file: File) => {
+    setBusy(true);
+    const result = await parseRft006(file);
+    setBusy(false);
+    if (!result.report) {
+      setDiagnostics(result.diagnostics);
+      toast.error(result.error ?? "Não foi possível importar o RFT006.");
+      return;
+    }
+    if (report) setPending(result.report);
+    else await persist(result.report);
+  };
+
+  const summary = report ? summarizeRft006(report) : null;
+
+  return (
+    <Layout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Gerar modelo avulso — RFT006</h1>
+          <p className="text-sm text-muted-foreground">Importe o relatório, confira as Notas agrupadas e seus diagnósticos. Os dados ficam somente neste navegador.</p>
+        </div>
+
+        <input ref={inputRef} type="file" accept=".xlsx,.xls" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); event.target.value = ""; }} />
+        <Card className="shadow-card">
+          <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+            <FileSpreadsheet className="h-12 w-12 text-primary" />
+            <div><p className="font-medium">Selecione o arquivo Excel do relatório RFT006</p><p className="text-sm text-muted-foreground">Formatos aceitos: .xlsx, .xls</p></div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={() => inputRef.current?.click()} disabled={busy || loading}>{report ? <RefreshCw className="mr-1 h-4 w-4" /> : <Upload className="mr-1 h-4 w-4" />}{busy ? "Lendo..." : report ? "Substituir relatório" : "Importar arquivo"}</Button>
+              {report && <Button variant="outline" onClick={async () => { await clearRft006Report(); setReport(null); setDiagnostics(null); toast.success("RFT006 removido deste navegador."); }}><Trash2 className="mr-1 h-4 w-4" /> Limpar</Button>}
+            </div>
+          </CardContent>
+        </Card>
+
+        {diagnostics && <Alert variant="destructive"><AlertTriangle className="h-4 w-4" /><AlertTitle>Estrutura do RFT006 inválida</AlertTitle><AlertDescription><p>{diagnostics.diagnostics.map((item) => item.message).join(" ")}</p><p className="mt-1 text-xs">Arquivo: {diagnostics.fileName} · Aba: {diagnostics.sheetName ?? "não identificada"} · Cabeçalho: {diagnostics.headerRow ?? "não identificado"}</p></AlertDescription></Alert>}
+
+        {report && summary && <>
+          <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Resumo da importação</CardTitle></CardHeader><CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Info label="Arquivo" value={report.fileName} /><Info label="Importado em" value={new Date(report.importedAt).toLocaleString("pt-BR")} /><Info label="Linhas" value={String(summary.linhas)} /><Info label="Notas" value={String(summary.notas)} /><Info label="Prontas" value={String(summary.prontas)} tone="success" /><Info label="Não elegíveis" value={String(summary.naoElegiveis)} tone="warning" /><Info label="Com inconsistência" value={String(summary.inconsistentes)} tone="error" /><Info label="Diagnósticos" value={String(summary.diagnosticos)} />
+          </CardContent></Card>
+
+          <Card className="shadow-card"><CardHeader><CardTitle className="text-base">Notas do relatório</CardTitle></CardHeader><CardContent className="overflow-x-auto p-0"><Table><TableHeader><TableRow><TableHead>Nota</TableHead><TableHead>Razão Social do emitente</TableHead><TableHead>CPF/CNPJ</TableHead><TableHead>IE</TableHead><TableHead className="text-right">Itens</TableHead><TableHead className="text-right">Valor líquido</TableHead><TableHead>Situação</TableHead><TableHead className="w-16 text-center">Detalhes</TableHead></TableRow></TableHeader><TableBody>
+            {report.notas.map((nota) => <TableRow key={nota.nota}><TableCell className="font-semibold">{nota.nota}</TableCell><TableCell>{nota.emitente.razaoSocial || "—"}</TableCell><TableCell>{nota.emitente.cnpj || "—"}</TableCell><TableCell>{nota.emitente.ie || "—"}</TableCell><TableCell className="text-right">{nota.items.length}</TableCell><TableCell className="text-right">{currency.format(nota.items.reduce((total, item) => total + (item.valorLiquido ?? 0), 0))}</TableCell><TableCell><StatusBadge status={nota.situacao} /></TableCell><TableCell className="text-center"><Button size="icon" variant="ghost" aria-label={`Visualizar detalhes da Nota ${nota.nota}`} onClick={() => setDetails(nota)}><Eye className="h-4 w-4" /></Button></TableCell></TableRow>)}
+          </TableBody></Table></CardContent></Card>
+        </>}
+      </div>
+
+      <AlertDialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Substituir RFT006 importado?</AlertDialogTitle><AlertDialogDescription>Já existe um relatório RFT006 salvo neste navegador. A substituição removerá somente esse relatório e não altera o GRL019.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { if (pending) void persist(pending); setPending(null); }}>Substituir relatório</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <NotaDetails nota={details} onOpenChange={(open) => !open && setDetails(null)} />
+    </Layout>
+  );
+}
+
+function StatusBadge({ status }: { status: Rft006NotaGroup["situacao"] }) {
+  const config = RFT006_SITUACOES[status];
+  const className = config.tone === "success" ? "bg-success text-success-foreground" : config.tone === "warning" ? "bg-warning text-warning-foreground" : "bg-destructive text-destructive-foreground";
+  return <Badge className={className}>{config.label}</Badge>;
+}
+
+function Info({ label, value, tone }: { label: string; value: string; tone?: "success" | "warning" | "error" }) {
+  const color = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "error" ? "text-destructive" : "";
+  return <div className="rounded-md border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">{label}</div><div className={`break-words font-semibold ${color}`}>{value}</div></div>;
+}
+
+function NotaDetails({ nota, onOpenChange }: { nota: Rft006NotaGroup | null; onOpenChange: (open: boolean) => void }) {
+  const cfops = nota ? Array.from(new Set(nota.rows.map((row) => row.cfop || "Inválido"))) : [];
+  return <Dialog open={!!nota} onOpenChange={onOpenChange}><DialogContent className="max-h-[88vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>Detalhes da Nota {nota?.nota}</DialogTitle><DialogDescription>Dados importados do RFT006 disponíveis somente para consulta.</DialogDescription></DialogHeader>{nota && <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Info label="Emitente" value={nota.emitente.razaoSocial || "—"} /><Info label="CPF/CNPJ" value={nota.emitente.cnpj || "—"} /><Info label="IE" value={nota.emitente.ie || "—"} /><Info label="CFOPs de origem" value={cfops.join(", ")} /></div><div className="overflow-x-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Descrição</TableHead><TableHead>NCM</TableHead><TableHead>Un.</TableHead><TableHead className="text-right">Quantidade</TableHead><TableHead className="text-right">Valor unitário</TableHead><TableHead className="text-right">Valor bruto</TableHead><TableHead className="text-right">Desconto</TableHead><TableHead className="text-right">Valor líquido</TableHead></TableRow></TableHeader><TableBody>{nota.items.map((item, index) => <TableRow key={`${nota.nota}-${index}`}><TableCell>{item.descricao || "—"}</TableCell><TableCell>{item.ncm || "—"}</TableCell><TableCell>{item.unidade || "—"}</TableCell><TableCell className="text-right">{item.quantidade == null ? "—" : number.format(item.quantidade)}</TableCell><TableCell className="text-right">{item.valorUnitario == null ? "—" : currency.format(item.valorUnitario)}</TableCell><TableCell className="text-right">{item.valorTotal == null ? "—" : currency.format(item.valorTotal)}</TableCell><TableCell className="text-right">{item.valorDesconto == null ? "—" : currency.format(item.valorDesconto)}</TableCell><TableCell className="text-right">{item.valorLiquido == null ? "—" : currency.format(item.valorLiquido)}</TableCell></TableRow>)}</TableBody></Table></div><div><h3 className="mb-2 text-sm font-semibold">Diagnósticos da Nota</h3>{nota.diagnostics.length ? <ul className="space-y-1 text-sm text-muted-foreground">{nota.diagnostics.map((diagnostic, index) => <li key={`${diagnostic.code}-${index}`} className="rounded-md border bg-muted/30 p-2">{diagnostic.message}</li>)}</ul> : <p className="text-sm text-muted-foreground">Nenhuma inconsistência identificada.</p>}</div></div>}<DialogFooter><Button onClick={() => onOpenChange(false)}>Fechar</Button></DialogFooter></DialogContent></Dialog>;
+}

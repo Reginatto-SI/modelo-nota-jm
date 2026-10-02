@@ -9,6 +9,7 @@ import {
   Package,
   FileText,
   ScrollText,
+  ReceiptText,
   LogOut,
   LockKeyhole,
   PanelLeftClose,
@@ -26,7 +27,8 @@ const nav = [
   { to: "/", label: "Início", icon: Home, end: true },
   { to: "/importar", label: "Importar GRL019", icon: Upload },
   // Renomeado: a tela localiza um contrato e gera o modelo de nota (não é só pesquisa).
-  { to: "/pesquisa", label: "Gerar Modelo de Nota", icon: Search },
+  { to: "/pesquisa", label: "Gerar modelo por contrato — GRL019", icon: Search },
+  { to: "/rft006", label: "Gerar modelo avulso — RFT006", icon: ReceiptText },
 ];
 
 const cadastros = [
