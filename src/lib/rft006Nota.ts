@@ -1,6 +1,7 @@
 import type { Nota, NotaParty, NotaRft006Item } from "./nota";
 import { renderTemplate } from "./nota";
 import type { Rft006NotaGroup } from "./rft006";
+import { getRft006FixedGenerationConfig } from "./rft006FixedDefaults";
 
 export interface Rft006GenerationConfig {
   destinatario: NotaParty;
@@ -157,4 +158,13 @@ export function generateValidatedRft006Pdf(
   if (error) return error;
   generate([nota], buildRft006PdfFileName(nota));
   return null;
+}
+
+// Atalho individual: apenas compõe os helpers homologados de montagem, validação, nome e geração.
+export function generateFixedRft006Pdf(
+  group: Rft006NotaGroup,
+  generate: (notas: Nota[], fileName: string) => void,
+) {
+  const nota = buildRft006Nota(group, getRft006FixedGenerationConfig());
+  return generateValidatedRft006Pdf(nota, generate);
 }

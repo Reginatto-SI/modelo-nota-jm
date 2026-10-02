@@ -1,4 +1,5 @@
 import type { NotaParty } from "./nota";
+import type { Rft006GenerationConfig } from "./rft006Nota";
 
 // Padrão operacional temporário e centralizado do fluxo individual; não persiste nem altera cadastros.
 export const RFT006_FIXED_RECIPIENT: NotaParty = {
@@ -21,3 +22,14 @@ export const RFT006_FIXED_DEFAULTS = {
     "ICMS NAO INCIDENTE CONFORME PREVISTO NO ARTIGO 29 DO ANEXO VII DO RICMS/MT.\n" +
     "PROCON-MT - TELEFONE: 151 OU (65) 3613-2100 - ENDERECO: AVENIDA HISTORIADOR RUBENS DE MENDONCA, S/N, BAIRRO BAU, CUIABA-MT, CEP 78045-100. REF NOTA {{nota_referencia}}",
 } as const;
+
+// Entrega uma cópia isolada para que revisão e geração direta nunca alterem os defaults compartilhados.
+export function getRft006FixedGenerationConfig(): Rft006GenerationConfig {
+  return {
+    destinatario: { ...RFT006_FIXED_DEFAULTS.destinatario },
+    cfop: RFT006_FIXED_DEFAULTS.cfop,
+    cst: RFT006_FIXED_DEFAULTS.cst,
+    naturezaOperacao: RFT006_FIXED_DEFAULTS.naturezaOperacao,
+    dadosAdicionais: RFT006_FIXED_DEFAULTS.dadosAdicionaisTemplate,
+  };
+}
