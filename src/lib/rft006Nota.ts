@@ -131,4 +131,29 @@ export function validateRft006Nota(nota: Nota): string[] {
 }
 
 export const getPreviewReturnPath = (notas: Nota[]) => notas.some((nota) => nota.sourceType === "rft006") ? "/rft006" : "/pesquisa";
-export const canGeneratePdf = (nota: Nota) => nota.sourceType !== "rft006";
+
+function sanitizeFileNamePart(value: string | undefined) {
+  return String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[\/\\:*?"<>|]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[ .-]+|[ .-]+$/g, "");
+}
+
+export function buildRft006PdfFileName(nota: Nota) {
+  // Nome próprio do fluxo: não consulta contratos nem metadados exclusivos do GRL019.
+  const referencia = sanitizeFileNamePart(nota.notaReferencia) || "sem referência";
+  const emitente = sanitizeFileNamePart(nota.emitente.nome) || "emitente";
+  return `Modelo RFT006 - Nota ${referencia} - ${emitente}.pdf`;
+}
+
+export function generateValidatedRft006Pdf(
+  nota: Nota,
+  generate: (notas: Nota[], fileName: string) => void,
+) {
+  const error = validateRft006Nota(nota)[0];
+  if (error) return error;
+  generate([nota], buildRft006PdfFileName(nota));
+  return null;
+}

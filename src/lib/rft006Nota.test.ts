@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NotaParty } from "./nota";
 import type { Rft006NotaGroup } from "./rft006";
-import { buildRft006Nota, buildRft006Variables, canGeneratePdf, getPreviewReturnPath, getRft006Totals, updateRft006Nota, validateRft006Nota } from "./rft006Nota";
+import { buildRft006Nota, buildRft006PdfFileName, buildRft006Variables, generateValidatedRft006Pdf, getPreviewReturnPath, getRft006Totals, updateRft006Nota, validateRft006Nota } from "./rft006Nota";
 
 const destinatario: NotaParty = { nome: "Associação Destino", cpfCnpj: "22", ie: "IE-2", endereco: "Rua B", bairro: "Centro", municipio: "Cuiabá", uf: "MT", cep: "78000" };
 const group: Rft006NotaGroup = {
@@ -75,11 +75,29 @@ describe("Nota RFT006", () => {
     expect(validateRft006Nota(build())).toEqual([]);
   });
 
-  it("define retorno próprio e bloqueia PDF somente para RFT006", () => {
+  it("define retorno próprio para RFT006", () => {
     const nota = build();
     expect(getPreviewReturnPath([nota])).toBe("/rft006");
-    expect(canGeneratePdf(nota)).toBe(false);
-    expect(canGeneratePdf({ ...nota, sourceType: "grl019" })).toBe(true);
+  });
+
+  it("usa nome próprio sanitizado sem metadados de contrato", () => {
+    const nota = { ...build(), notaReferencia: "98/76", emitente: { ...build().emitente, nome: "Agricultor: Teste" } };
+    expect(buildRft006PdfFileName(nota)).toBe("Modelo RFT006 - Nota 98-76 - Agricultor- Teste.pdf");
+  });
+
+  it("bloqueia nota inválida antes de chamar o gerador", () => {
+    const calls: unknown[] = [];
+    const error = generateValidatedRft006Pdf({ ...build(), cfop: "" }, (...args) => calls.push(args));
+    expect(error).toBe("Informe o CFOP.");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("envia nota válida ao gerador com o nome RFT006", () => {
+    const calls: unknown[][] = [];
+    expect(generateValidatedRft006Pdf(build(), (...args) => calls.push(args))).toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toEqual([build()]);
+    expect(calls[0][1]).toBe("Modelo RFT006 - Nota 9876 - Agricultor.pdf");
   });
 
   it("mantém a estrutura singular compatível para GRL019", () => {

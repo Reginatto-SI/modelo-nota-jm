@@ -19,7 +19,7 @@ import { TIPO_FRETE_OPTIONS, normalizePreviewTipoFrete, normalizeTipoFrete } fro
 import { toast } from "sonner";
 import { useArmazens, useCooperativas } from "@/lib/db";
 import { formatCurrencyBR, formatUnitValueBR, parseCurrencyBR, parseDecimalBR } from "@/lib/numberFormat";
-import { canGeneratePdf, getPreviewReturnPath, updateRft006Nota } from "@/lib/rft006Nota";
+import { generateValidatedRft006Pdf, getPreviewReturnPath, updateRft006Nota } from "@/lib/rft006Nota";
 
 export default function Preview() {
   const location = useLocation();
@@ -97,12 +97,21 @@ export default function Preview() {
 
   const gerarPdfs = () => {
     // Cada aba/modelo vira um PDF próprio; não une CFOPs diferentes no mesmo arquivo.
-    notas.forEach((nota) => generatePdf([nota], buildNotaPdfFileName(nota)));
+    notas.forEach((nota) => {
+      if (nota.sourceType === "rft006") generateValidatedRft006Pdf(nota, generatePdf);
+      else generatePdf([nota], buildNotaPdfFileName(nota));
+    });
     toast.success(notas.length > 1 ? "PDFs gerados separadamente." : "PDF gerado.");
   };
 
   const gerarPdfConfirmado = () => {
-    if (notas.some((nota) => !canGeneratePdf(nota))) return toast.info("O PDF RFT006 será habilitado após a validação da prévia multi-item.");
+    // O RFT006 possui validação multi-item própria e não passa pelas premissas singulares do GRL019.
+    const primeiraRft006Invalida = notas
+      .filter((nota) => nota.sourceType === "rft006")
+      .map((nota) => generateValidatedRft006Pdf(nota, () => undefined))
+      .find(Boolean);
+    if (primeiraRft006Invalida) return toast.error(primeiraRft006Invalida);
+    if (notas.every((nota) => nota.sourceType === "rft006")) return gerarPdfs();
     const primeiraNotaComPlaceholder = notas.find((n) => isManualNota(n) && hasPendingPlaceholders(n));
     if (primeiraNotaComPlaceholder) {
       toast.warning("Há placeholders pendentes nos dados adicionais. Revise antes de usar o PDF orientativo.");
@@ -158,7 +167,7 @@ export default function Preview() {
                 <Copy className="mr-1 h-4 w-4" /> Duplicar como avulso
               </Button>
             )}
-            <Button onClick={gerarPdfConfirmado} disabled={isRft006} title={isRft006 ? "Disponível após a validação da prévia multi-item" : undefined}><Download className="mr-1 h-4 w-4" /> {isRft006 ? "PDF em breve" : "Gerar PDF"}</Button>
+            <Button onClick={gerarPdfConfirmado}><Download className="mr-1 h-4 w-4" /> Gerar PDF</Button>
           </div>
         </div>
 
@@ -167,7 +176,7 @@ export default function Preview() {
             Modo avulso/manual: revise os dados antes de gerar o PDF. O sistema usará as informações digitadas nesta tela.
           </div>
         )}
-        {isRft006 && <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Prévia RFT006 multi-item. As alterações ficam somente nesta geração; o PDF ainda não está disponível.</div>}
+        {isRft006 && <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Prévia RFT006 multi-item. As alterações ficam somente nesta geração e serão usadas no PDF orientativo.</div>}
 
         <Tabs defaultValue="0">
           <TabsList>
