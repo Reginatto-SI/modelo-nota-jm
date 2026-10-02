@@ -19,9 +19,10 @@ import { parseRft006, type Rft006ImportDiagnostics, type Rft006NotaGroup, type R
 import { EMPTY_RFT006_FILTERS, filterRft006Notas, getRft006NotaLiquidTotal, RFT006_SITUACOES, summarizeRft006, type Rft006Filters } from "@/lib/rft006View";
 import { useArmazens, useRft006Config, useSaveRft006Config } from "@/lib/db";
 import type { NotaParty } from "@/lib/nota";
-import { buildRft006Nota } from "@/lib/rft006Nota";
+import { buildRft006Nota, generateFixedRft006Pdf } from "@/lib/rft006Nota";
 import { armazemToNotaParty, canSaveRft006Default, initializeRft006Config, isValidRft006Recipient, selectRegisteredRft006Recipient, startManualRft006Recipient } from "@/lib/rft006Config";
-import { RFT006_FIXED_DEFAULTS } from "@/lib/rft006FixedDefaults";
+import { getRft006FixedGenerationConfig } from "@/lib/rft006FixedDefaults";
+import { generatePdf } from "@/lib/pdf";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 6 });
@@ -36,6 +37,8 @@ export default function Rft006() {
   const [diagnostics, setDiagnostics] = useState<Rft006ImportDiagnostics | null>(null);
   const [details, setDetails] = useState<Rft006NotaGroup | null>(null);
   const [generating, setGenerating] = useState<Rft006NotaGroup | null>(null);
+  const [generatingPdfNota, setGeneratingPdfNota] = useState<string | null>(null);
+  const generatingPdfRef = useRef<string | null>(null);
   const [destinatarioId, setDestinatarioId] = useState<string | null>(null);
   const [destinatario, setDestinatario] = useState<NotaParty | null>(null);
   const [destinatarioMode, setDestinatarioMode] = useState<"cadastro" | "manual">("cadastro");
@@ -109,15 +112,33 @@ export default function Rft006() {
     setGenerationConfigReady(true);
     setGenerating(nota);
     setDestinatarioId(null);
-    setDestinatario({ ...RFT006_FIXED_DEFAULTS.destinatario });
+    const fixedConfig = getRft006FixedGenerationConfig();
+    setDestinatario(fixedConfig.destinatario);
     setDestinatarioMode("manual");
     setDestinatarioBusca("");
-    setCfop(RFT006_FIXED_DEFAULTS.cfop);
-    setNatureza(RFT006_FIXED_DEFAULTS.naturezaOperacao);
-    setCst(RFT006_FIXED_DEFAULTS.cst);
-    setDadosAdicionais(RFT006_FIXED_DEFAULTS.dadosAdicionaisTemplate);
+    setCfop(fixedConfig.cfop);
+    setNatureza(fixedConfig.naturezaOperacao);
+    setCst(fixedConfig.cst);
+    setDadosAdicionais(fixedConfig.dadosAdicionais);
     setDefaultLoaded(false);
     setDestinatarioNeedsReselection(false);
+  };
+
+  const generateDirectPdf = (group: Rft006NotaGroup) => {
+    if (generatingPdfRef.current === group.nota) return;
+    generatingPdfRef.current = group.nota;
+    setGeneratingPdfNota(group.nota);
+
+    // O helper mantém builder, validação, renderer e nome de arquivo idênticos aos usados pela prévia.
+    const error = generateFixedRft006Pdf(group, generatePdf);
+    if (error) toast.error(error);
+    else toast.success(`PDF da Nota ${group.nota} gerado.`);
+
+    // Mantém a trava até o próximo ciclo de eventos, cobrindo o segundo clique de um duplo clique.
+    window.setTimeout(() => {
+      generatingPdfRef.current = null;
+      setGeneratingPdfNota(null);
+    }, 0);
   };
 
   const validateGenerationFields = () => {
@@ -175,7 +196,7 @@ export default function Rft006() {
           </CardContent></Card>
 
           <Card className="shadow-card"><CardHeader className="space-y-4"><CardTitle className="text-base">Notas do relatório</CardTitle><div className="space-y-3"><div className="grid gap-3 md:grid-cols-[minmax(260px,1.5fr)_minmax(190px,0.8fr)_minmax(150px,0.6fr)] md:items-end"><div className="space-y-1.5"><Label htmlFor="rft006-search">Pesquisar</Label><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input id="rft006-search" className="pl-9" placeholder="Pesquisar nota, emitente, CPF/CNPJ ou IE" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} /></div></div><div className="space-y-1.5"><Label>Situação</Label><Select value={filters.situacao} onValueChange={(value) => setFilters((current) => ({ ...current, situacao: value as Rft006Filters["situacao"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todas">Todas</SelectItem>{Object.entries(RFT006_SITUACOES).map(([value, config]) => <SelectItem key={value} value={value}>{config.label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1.5"><Label>Itens</Label><Select value={filters.items} onValueChange={(value) => setFilters((current) => ({ ...current, items: value as Rft006Filters["items"] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="um">1 item</SelectItem><SelectItem value="mais_de_um">Mais de 1 item</SelectItem></SelectContent></Select></div></div><div className="grid gap-3 sm:grid-cols-2 md:grid-cols-[minmax(180px,0.7fr)_minmax(180px,0.7fr)_auto_1fr] md:items-end"><FilterValueInput id="rft006-min" label="Valor líquido mínimo" value={filters.minValue} onChange={(minValue) => setFilters((current) => ({ ...current, minValue }))} /><FilterValueInput id="rft006-max" label="Valor líquido máximo" value={filters.maxValue} onChange={(maxValue) => setFilters((current) => ({ ...current, maxValue }))} /><Button variant="outline" onClick={clearFilters} disabled={!hasFilters}>Limpar filtros</Button><p className="pb-2 text-sm text-muted-foreground md:text-right">{hasFilters ? `${filteredNotas.length} de ${report.notas.length} Notas exibidas` : `${report.notas.length} Notas exibidas`}</p></div></div></CardHeader><CardContent className="p-0">{filteredNotas.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nota</TableHead><TableHead>Razão Social do emitente</TableHead><TableHead>CPF/CNPJ</TableHead><TableHead>IE</TableHead><TableHead className="text-right">Itens</TableHead><TableHead className="text-right">Valor líquido</TableHead><TableHead>Situação</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>
-            {filteredNotas.map((nota) => <TableRow key={nota.nota}><TableCell className="font-semibold">{nota.nota}</TableCell><TableCell>{nota.emitente.razaoSocial || "—"}</TableCell><TableCell>{nota.emitente.cnpj || "—"}</TableCell><TableCell>{nota.emitente.ie || "—"}</TableCell><TableCell className="text-right">{nota.items.length}</TableCell><TableCell className="text-right">{currency.format(getRft006NotaLiquidTotal(nota))}</TableCell><TableCell><StatusBadge status={nota.situacao} /></TableCell><TableCell><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`Visualizar detalhes da Nota ${nota.nota}`} onClick={() => setDetails(nota)}><Eye className="h-4 w-4" /></Button>{nota.situacao === "pronto" && <Button size="sm" onClick={() => startGeneration(nota)}>Gerar modelo</Button>}</div></TableCell></TableRow>)}
+            {filteredNotas.map((nota) => <TableRow key={nota.nota}><TableCell className="font-semibold">{nota.nota}</TableCell><TableCell>{nota.emitente.razaoSocial || "—"}</TableCell><TableCell>{nota.emitente.cnpj || "—"}</TableCell><TableCell>{nota.emitente.ie || "—"}</TableCell><TableCell className="text-right">{nota.items.length}</TableCell><TableCell className="text-right">{currency.format(getRft006NotaLiquidTotal(nota))}</TableCell><TableCell><StatusBadge status={nota.situacao} /></TableCell><TableCell><div className="flex flex-wrap justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`Visualizar detalhes da Nota ${nota.nota}`} onClick={() => setDetails(nota)}><Eye className="h-4 w-4" /></Button>{nota.situacao === "pronto" && <><Button size="sm" variant="outline" onClick={() => startGeneration(nota)}>Revisar modelo</Button><Button size="sm" disabled={generatingPdfNota === nota.nota} onClick={() => generateDirectPdf(nota)}>{generatingPdfNota === nota.nota ? "Gerando..." : "Gerar PDF"}</Button></>}</div></TableCell></TableRow>)}
           </TableBody></Table></div> : <div className="flex flex-col items-center gap-3 px-4 py-10 text-center"><p className="text-sm text-muted-foreground">Nenhuma Nota encontrada com os filtros informados.</p><Button variant="outline" size="sm" onClick={clearFilters}>Limpar filtros</Button></div>}</CardContent></Card>
         </>}
       </div>
