@@ -10,12 +10,13 @@ describe("modelo e lote XML NF-e", () => {
     expect(parsed.status).toBe("ready");
     expect(parsed.nfe?.itens).toHaveLength(2);
     const nota = buildNotaFromNfeXml(parsed.nfe!);
-    expect(nota).toMatchObject({ sourceType: "rft006", notaReferencia: "417", cfop: "5949", cst: "41", emitente: parsed.nfe?.produtor, valorLiquido: 97 });
+    expect(nota).toMatchObject({ sourceType: "rft006", notaReferencia: "417", cfop: "5949", cst: "51", emitente: parsed.nfe?.produtor, valorLiquido: 97 });
     expect(nota.destinatario.nome).toContain("BIOAGRO");
+    expect(nota.dadosAdicionais).toContain("ICMS DIFERIDO NOS TERMOS DO ARTIGO 29 DO ANEXO VII DO RICMS/MT.");
     expect(nota.dadosAdicionais).toContain("REF NOTA 417");
     expect(nota.itens).toHaveLength(2);
     expect(nota.itens?.[0].valorUnitario).toBe(5); // bruto fica apenas interno; o renderer calcula líquido/quantidade.
-    expect(nota.produto.cst).toBe("41");
+    expect(nota.produto.cst).toBe("51");
   });
 
   it("seleciona prontos, impede inválidos e detecta duplicidade pela chave", () => {
