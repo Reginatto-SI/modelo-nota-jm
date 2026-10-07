@@ -10,6 +10,14 @@ export const RFT006_SITUACOES: Record<Rft006Situacao, { label: string; tone: "su
 
 export type Rft006ItemsFilter = "todos" | "um" | "mais_de_um";
 
+export type Rft006SortKey = "nota" | "razaoSocial";
+export type Rft006SortDirection = "asc" | "desc";
+
+export interface Rft006Sort {
+  key: Rft006SortKey;
+  direction: Rft006SortDirection;
+}
+
 export interface Rft006Filters {
   search: string;
   minValue: string;
@@ -58,6 +66,24 @@ export function filterRft006Notas(notas: Rft006NotaGroup[], filters: Rft006Filte
     if (filters.items === "mais_de_um" && nota.items.length <= 1) return false;
     return true;
   });
+}
+
+export function sortRft006Notas(notas: Rft006NotaGroup[], sort: Rft006Sort | null): Rft006NotaGroup[] {
+  if (!sort) return [...notas];
+
+  const direction = sort.direction === "asc" ? 1 : -1;
+  const compareNota = (a: Rft006NotaGroup, b: Rft006NotaGroup) =>
+    String(a.nota).localeCompare(String(b.nota), "pt-BR", { numeric: true, sensitivity: "base" });
+  const compareRazaoSocial = (a: Rft006NotaGroup, b: Rft006NotaGroup) => {
+    const byName = String(a.emitente.razaoSocial ?? "").trim().localeCompare(
+      String(b.emitente.razaoSocial ?? "").trim(),
+      "pt-BR",
+      { sensitivity: "base" },
+    );
+    return byName || compareNota(a, b);
+  };
+
+  return [...notas].sort((a, b) => direction * (sort.key === "nota" ? compareNota(a, b) : compareRazaoSocial(a, b)));
 }
 
 export function summarizeRft006(report: Rft006Report) {
