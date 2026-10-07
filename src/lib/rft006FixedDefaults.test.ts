@@ -25,8 +25,10 @@ describe("defaults operacionais temporários do RFT006", () => {
       uf: "MT",
     });
     expect(RFT006_FIXED_DEFAULTS.cfop).toBe("5949");
-    expect(RFT006_FIXED_DEFAULTS.cst).toBe("41");
+    expect(RFT006_FIXED_DEFAULTS.cst).toBe("51");
     expect(RFT006_FIXED_DEFAULTS.naturezaOperacao).toBe("REMESSA SIMBÓLICA P/ INDUSTRIALIZAÇÃO");
+    expect(RFT006_FIXED_DEFAULTS.dadosAdicionaisTemplate).toContain("ICMS DIFERIDO NOS TERMOS DO ARTIGO 29 DO ANEXO VII DO RICMS/MT.");
+    expect(RFT006_FIXED_DEFAULTS.dadosAdicionaisTemplate).toContain("PROCON/MT - AV. GEN. RAMIRO DE NORONHA, Nº 294 - 1º ANDAR, JARDIM CUIABÁ, CUIABÁ- MT, CEP: 78043-180");
     expect(RFT006_FIXED_DEFAULTS.dadosAdicionaisTemplate).toContain("REF NOTA {{nota_referencia}}");
   });
 
@@ -62,7 +64,7 @@ describe("defaults operacionais temporários do RFT006", () => {
     expect(error).toBeNull();
     expect(calls).toHaveLength(1);
     expect(calls[0][1]).toBe("Modelo RFT006 - Nota 418 - Agricultor.pdf");
-    expect(calls[0][0]).toMatchObject([{ notaReferencia: "418", cfop: "5949", cst: "41", dadosAdicionais: expect.stringContaining("REF NOTA 418") }]);
+    expect(calls[0][0]).toMatchObject([{ notaReferencia: "418", cfop: "5949", cst: "51", dadosAdicionais: expect.stringContaining("REF NOTA 418") }]);
   });
 
   it("não chama o renderer quando a Nota direta é inválida", () => {
