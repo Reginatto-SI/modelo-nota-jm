@@ -16,11 +16,10 @@ export const RFT006_FIXED_RECIPIENT: NotaParty = {
 export const RFT006_FIXED_DEFAULTS = {
   destinatario: RFT006_FIXED_RECIPIENT,
   cfop: "5949",
-  cst: "41",
+  cst: "51",
   naturezaOperacao: "REMESSA SIMBÓLICA P/ INDUSTRIALIZAÇÃO",
   dadosAdicionaisTemplate:
-    "ICMS NAO INCIDENTE CONFORME PREVISTO NO ARTIGO 29 DO ANEXO VII DO RICMS/MT.\n" +
-    "PROCON-MT - TELEFONE: 151 OU (65) 3613-2100 - ENDERECO: AVENIDA HISTORIADOR RUBENS DE MENDONCA, S/N, BAIRRO BAU, CUIABA-MT, CEP 78045-100. REF NOTA {{nota_referencia}}",
+    "ICMS DIFERIDO NOS TERMOS DO ARTIGO 29 DO ANEXO VII DO RICMS/MT.PROCON/MT - AV. GEN. RAMIRO DE NORONHA, Nº 294 - 1º ANDAR, JARDIM CUIABÁ, CUIABÁ- MT, CEP: 78043-180 REF NOTA {{nota_referencia}}",
 } as const;
 
 // Entrega uma cópia isolada para que revisão e geração direta nunca alterem os defaults compartilhados.
